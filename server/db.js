@@ -48,6 +48,8 @@ const SCHEMA = [
     boxes         INTEGER NOT NULL CHECK (boxes >= 0),
     total_usd     REAL NOT NULL CHECK (total_usd >= 0),
     status        TEXT DEFAULT 'Programado',
+    delivery_date TEXT,
+    delivered_boxes INTEGER CHECK (delivered_boxes >= 0),
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE TABLE IF NOT EXISTS shipment_calibers (
@@ -58,13 +60,79 @@ const SCHEMA = [
     price_kg     REAL NOT NULL DEFAULT 0 CHECK (price_kg >= 0),
     UNIQUE(shipment_id, code)
   )`,
+  `CREATE TABLE IF NOT EXISTS products (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS notifications (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    shipment_id   INTEGER REFERENCES shipments(id) ON DELETE SET NULL,
+    shipment_code TEXT NOT NULL,
+    type          TEXT NOT NULL,
+    message       TEXT NOT NULL,
+    is_read       INTEGER NOT NULL DEFAULT 0,
+    dedupe_key    TEXT UNIQUE,
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS prospectos (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id     INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+    company       TEXT NOT NULL,
+    country       TEXT NOT NULL DEFAULT '',
+    contact       TEXT NOT NULL DEFAULT '',
+    email         TEXT,
+    product       TEXT NOT NULL,
+    condition     TEXT NOT NULL DEFAULT 'Venta',
+    deal          TEXT NOT NULL DEFAULT 'Precio Cerrado',
+    transport     TEXT NOT NULL DEFAULT 'Marítimo',
+    port          TEXT,
+    load_week     INTEGER CHECK (load_week BETWEEN 1 AND 52),
+    delivery_date TEXT,
+    valid_until   TEXT,
+    payment_terms TEXT,
+    variance      REAL NOT NULL DEFAULT 2.0,
+    calibres      TEXT NOT NULL DEFAULT '{}',
+    boxes         INTEGER NOT NULL DEFAULT 0 CHECK (boxes >= 0),
+    total_usd     REAL NOT NULL DEFAULT 0 CHECK (total_usd >= 0),
+    status        TEXT NOT NULL DEFAULT 'Nuevo',
+    notes         TEXT,
+    shipment_id   INTEGER REFERENCES shipments(id) ON DELETE SET NULL,
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_notifications_shipment ON notifications(shipment_id)',
   'CREATE INDEX IF NOT EXISTS idx_shipments_client ON shipments(client_id)',
-  'CREATE INDEX IF NOT EXISTS idx_calibers_shipment ON shipment_calibers(shipment_id)'
+  'CREATE INDEX IF NOT EXISTS idx_calibers_shipment ON shipment_calibers(shipment_id)',
+  "INSERT INTO products (name) SELECT 'Kiwi' WHERE NOT EXISTS (SELECT 1 FROM products)"
 ];
 
+// Columnas agregadas después de crear la tabla: CREATE TABLE IF NOT EXISTS no las suma a una base existente
+const SHIPMENT_COLUMNS = [
+  ['delivery_date', 'delivery_date TEXT'],
+  ['delivered_boxes', 'delivered_boxes INTEGER CHECK (delivered_boxes >= 0)']
+];
+
+// Crea lo que falte sin tocar los datos existentes
+export async function applySchema(client = db) {
+  await client.batch(SCHEMA, 'write');
+
+  const { rows } = await client.execute('PRAGMA table_info(shipments)');
+  const existing = rows.map(row => row.name);
+
+  for (const [name, definition] of SHIPMENT_COLUMNS) {
+    if (existing.includes(name)) continue;
+    try {
+      await client.execute(`ALTER TABLE shipments ADD COLUMN ${definition}`);
+    } catch (error) {
+      // Otra instancia serverless pudo haberla agregado al mismo tiempo
+      if (!error.message.includes('duplicate column')) throw error;
+    }
+  }
+}
+
 const INSERT_SHIPMENT = `
-  INSERT INTO shipments (code, client_id, condition, deal, product, fruit_type, category, currency, load_week, eta_week, transport, port, payment_terms, variance, boxes, total_usd, status)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO shipments (code, client_id, condition, deal, product, fruit_type, category, currency, load_week, eta_week, transport, port, payment_terms, variance, boxes, total_usd, status, delivery_date)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
 async function seed() {
@@ -90,7 +158,7 @@ async function seed() {
         code, 1, 'Venta', 'Precio Cerrado', 'Kiwi Hayward Green',
         'Convencional', 'Cat 1', 'USD', 18, 'Semana 20 (ETA Mayo 15)',
         'Marítimo', 'Puerto de Rotterdam', '50/50; 15 días llegada fruta',
-        2.0, 2288, 49446.00, 'En Tránsito'
+        2.0, 2288, 49446.00, 'En Tránsito', null
       ]
     },
     { sql: insertCaliber, args: [code, 'C27', 500, 2.40] },
@@ -107,7 +175,7 @@ export function initDb() {
   if (!initPromise) {
     initPromise = (async () => {
       await db.execute('PRAGMA foreign_keys = ON');
-      await db.batch(SCHEMA, 'write');
+      await applySchema();
       await seed();
     })().catch(err => {
       initPromise = undefined;
@@ -117,5 +185,5 @@ export function initDb() {
   return initPromise;
 }
 
-export { INSERT_SHIPMENT, SCHEMA };
+export { INSERT_SHIPMENT };
 export default db;

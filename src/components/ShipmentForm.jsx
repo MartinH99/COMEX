@@ -1,28 +1,35 @@
-import React, { useState } from 'react';
-import { CALIBERS_MASTER } from '../data/mockData';
+import { useState } from 'react';
+import { CaliberEditor, getCaliberTotals } from './CaliberEditor';
+import { useProductSelect } from './ProductSelect';
+import { formatUsd } from './ui';
 
-export function ShipmentForm({ clients, onSave }) {
-  const [formData, setFormData] = useState({
-    clientId: clients[0]?.id || 1,
-    condition: 'Venta',
-    deal: 'Precio Cerrado',
-    product: 'Kiwi Hayward Green',
-    fruitType: 'Convencional',
-    category: 'Cat 1',
-    loadWeek: 18,
-    etaWeek: 'Semana 20',
-    transport: 'Marítimo',
-    port: '',
-    paymentTerms: clients[0]?.defaultPayment || '50/50; 15 días llegada',
-    variance: 2.0
+export function ShipmentForm({ clients, products, draft, onSave, onCancel, onError, onCreateProduct }) {
+  const [formData, setFormData] = useState(() => {
+    const client = clients.find(c => c.id === draft?.clientId) || clients[0];
+    return {
+      clientId: client?.id || 1,
+      condition: draft?.condition || 'Venta',
+      deal: draft?.deal || 'Precio Cerrado',
+      product: draft?.product || products[0]?.name || 'Kiwi',
+      fruitType: 'Convencional',
+      category: 'Cat 1',
+      loadWeek: draft?.loadWeek || 18,
+      deliveryDate: draft?.deliveryDate || '',
+      transport: draft?.transport || 'Marítimo',
+      port: draft?.port || '',
+      paymentTerms: draft?.paymentTerms || client?.defaultPayment || '50/50; 15 días llegada',
+      variance: draft?.variance ?? 2.0
+    };
   });
 
-  const [calibres, setCalibres] = useState(() => {
-    const init = {};
-    CALIBERS_MASTER.forEach(c => {
-      init[c.code] = { boxes: 0, priceKg: c.defaultPriceKg };
-    });
-    return init;
+  const [calibres, setCalibres] = useState(draft?.calibres || {});
+  const { boxes: totalBoxes, usd: totalUsd } = getCaliberTotals(calibres);
+
+  const productSelect = useProductSelect({
+    value: formData.product,
+    onChange: product => setFormData(prev => ({ ...prev, product })),
+    products,
+    onCreateProduct
   });
 
   const handleClientChange = (e) => {
@@ -35,41 +42,10 @@ export function ShipmentForm({ clients, onSave }) {
     }));
   };
 
-  const handleCaliberBoxChange = (code, value) => {
-    setCalibres(prev => ({
-      ...prev,
-      [code]: { ...prev[code], boxes: parseInt(value, 10) || 0 }
-    }));
-  };
-
-  const handleCaliberPriceChange = (code, value) => {
-    setCalibres(prev => ({
-      ...prev,
-      [code]: { ...prev[code], priceKg: parseFloat(value) || 0 }
-    }));
-  };
-
-  const distributeEquitativeMix = () => {
-    const target = ['C27', 'C30', 'C33', 'C36'];
-    const boxesEach = Math.floor(2288 / target.length);
-    setCalibres(prev => {
-      const updated = { ...prev };
-      Object.keys(updated).forEach(code => {
-        updated[code].boxes = target.includes(code) ? boxesEach : 0;
-      });
-      return updated;
-    });
-  };
-
-  const totalBoxes = Object.values(calibres).reduce((sum, item) => sum + item.boxes, 0);
-  const totalUsd = Object.values(calibres).reduce((sum, item) => sum + (item.boxes * 10 * item.priceKg), 0);
-  const totalPallets = (totalBoxes / 104).toFixed(1);
-  const totalTons = ((totalBoxes * 10) / 1000).toFixed(2);
-
   const handleSubmit = (e) => {
     e.preventDefault();
     if (totalBoxes === 0) {
-      alert('Ingresa la cantidad de cajas en al menos un calibre.');
+      onError('Ingresá la cantidad de cajas en al menos un calibre.');
       return;
     }
 
@@ -77,96 +53,97 @@ export function ShipmentForm({ clients, onSave }) {
       ...formData,
       boxes: totalBoxes,
       calibres,
-      totalUsd
+      totalUsd,
+      prospectId: draft?.prospectId
     };
 
     onSave(payload);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="card">
-      <h2>➕ Registrar Nuevo Embarque</h2>
-      
-      <div className="form-grid">
-        <div className="form-group">
-          <label htmlFor="clientId">Cliente</label>
-          <select id="clientId" value={formData.clientId} onChange={handleClientChange} required>
-            {clients.map(c => (
-              <option key={c.id} value={c.id}>{c.company} ({c.country})</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="condition">Condición Comercial</label>
-          <select id="condition" value={formData.condition} onChange={e => setFormData({...formData, condition: e.target.value})}>
-            <option value="Venta">Venta</option>
-            <option value="Compra">Compra</option>
-            <option value="Intercambio">Intercambio</option>
-          </select>
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="deal">Modalidad de Precio</label>
-          <select id="deal" value={formData.deal} onChange={e => setFormData({...formData, deal: e.target.value})}>
-            <option value="Precio Cerrado">Precio Cerrado</option>
-            <option value="Intercambio MG">Intercambio MG (Mínimo Garantizado)</option>
-          </select>
-        </div>
-
-        <div className="form-group">
-  <label htmlFor="transport">Tipo de Transporte</label>
-  <select id="transport" value={formData.transport} onChange={e => setFormData({...formData, transport: e.target.value})}>
-    <option value="Aéreo">Aéreo</option>
-    <option value="Marítimo">Marítimo</option>
-    <option value="Terrestre">Terrestre</option>
-  </select>
-</div>
-
-        <div className="form-group">
-          <label htmlFor="loadWeek">Semana de Carga (1-52)</label>
-          <input id="loadWeek" type="number" min="1" max="52" value={formData.loadWeek} onChange={e => setFormData({...formData, loadWeek: parseInt(e.target.value, 10)})} required />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="port">Puerto de Destino</label>
-          <input id="port" type="text" placeholder="Ej: Rotterdam / Shanghai" value={formData.port} onChange={e => setFormData({...formData, port: e.target.value})} required />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="paymentTerms">Condición de Pago</label>
-          <input id="paymentTerms" type="text" value={formData.paymentTerms} onChange={e => setFormData({...formData, paymentTerms: e.target.value})} required />
-        </div>
+    <>
+    <form onSubmit={handleSubmit} style={{ maxWidth: 1000 }}>
+      <div className="page-header">
+        <h1>Nuevo embarque</h1>
+        {draft && <span className="badge brand">Desde prospecto: {draft.company}</span>}
       </div>
 
-      <div className="pallet-spec-box" style={{ marginTop: '1.5rem' }}>
-        <div className="flex-between">
+      <div className="section">
+        <div className="section-header"><h2>Datos comerciales</h2></div>
+        <div className="section-body form-grid">
           <div>
-            <strong>Regla de Carga:</strong> 22 Pallets = 2,288 Cajas (22.88 Toneladas)
+            <label htmlFor="clientId">Cliente</label>
+            <select id="clientId" value={formData.clientId} onChange={handleClientChange} required>
+              {clients.map(c => (
+                <option key={c.id} value={c.id}>{c.company} ({c.country})</option>
+              ))}
+            </select>
           </div>
-          <button type="button" className="btn btn-secondary" onClick={distributeEquitativeMix}>⚡ Distribuir Homogéneo</button>
-        </div>
-        <div style={{ marginTop: '0.5rem', fontWeight: 'bold', color: totalBoxes === 2288 ? 'green' : 'red' }}>
-          Configurado: {totalBoxes} / 2,288 Cajas ({totalPallets} / 22 Pallets — {totalTons} TN)
+
+          {productSelect.field}
+
+          <div>
+            <label htmlFor="condition">Condición comercial</label>
+            <select id="condition" value={formData.condition} onChange={e => setFormData({...formData, condition: e.target.value})}>
+              <option value="Venta">Venta</option>
+              <option value="Compra">Compra</option>
+              <option value="Intercambio">Intercambio</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="deal">Modalidad de precio</label>
+            <select id="deal" value={formData.deal} onChange={e => setFormData({...formData, deal: e.target.value})}>
+              <option value="Precio Cerrado">Precio Cerrado</option>
+              <option value="Intercambio MG">Intercambio MG (Mínimo Garantizado)</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="transport">Tipo de transporte</label>
+            <select id="transport" value={formData.transport} onChange={e => setFormData({...formData, transport: e.target.value})}>
+              <option value="Aéreo">Aéreo</option>
+              <option value="Marítimo">Marítimo</option>
+              <option value="Terrestre">Terrestre</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="loadWeek">Semana de salida (1-52)</label>
+            <input id="loadWeek" type="number" min="1" max="52" value={formData.loadWeek} onChange={e => setFormData({...formData, loadWeek: parseInt(e.target.value, 10)})} required />
+          </div>
+
+          <div>
+            <label htmlFor="deliveryDate">Fecha de entrega estimada</label>
+            <input id="deliveryDate" type="date" value={formData.deliveryDate} onChange={e => setFormData({...formData, deliveryDate: e.target.value})} required />
+          </div>
+
+          <div>
+            <label htmlFor="variance">Tolerancia de diferencia de carga (%)</label>
+            <input id="variance" type="number" min="0" step="0.1" value={formData.variance} onChange={e => setFormData({...formData, variance: parseFloat(e.target.value) || 0})} required />
+          </div>
+
+          <div>
+            <label htmlFor="port">Puerto de destino</label>
+            <input id="port" type="text" placeholder="Ej: Rotterdam / Shanghai" value={formData.port} onChange={e => setFormData({...formData, port: e.target.value})} required />
+          </div>
+
+          <div>
+            <label htmlFor="paymentTerms">Condición de pago</label>
+            <input id="paymentTerms" type="text" value={formData.paymentTerms} onChange={e => setFormData({...formData, paymentTerms: e.target.value})} required />
+          </div>
         </div>
       </div>
 
-      <div className="caliber-matrix">
-        {CALIBERS_MASTER.map(c => (
-          <div key={c.code} className="caliber-card">
-            <div className="cal-title">{c.code} ({c.label})</div>
-            <label htmlFor={`boxes-${c.code}`}>Cajas 10kg:</label>
-            <input id={`boxes-${c.code}`} type="number" min="0" value={calibres[c.code].boxes} onChange={e => handleCaliberBoxChange(c.code, e.target.value)} />
-            <label htmlFor={`price-${c.code}`}>USD / Kg:</label>
-            <input id={`price-${c.code}`} type="number" step="0.01" value={calibres[c.code].priceKg} onChange={e => handleCaliberPriceChange(c.code, e.target.value)} />
-          </div>
-        ))}
-      </div>
+      <CaliberEditor calibres={calibres} setCalibres={setCalibres} />
 
       <div className="form-footer">
-        <div className="total-usd-display">Total USD: ${totalUsd.toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-        <button type="submit" className="btn btn-primary">💾 Guardar Embarque en BD</button>
+        <div className="total">Total: {formatUsd(totalUsd)} USD</div>
+        <button type="button" className="btn btn-subtle" onClick={onCancel}>Cancelar</button>
+        <button type="submit" className="btn btn-primary">Guardar embarque</button>
       </div>
     </form>
+    {productSelect.modal}
+    </>
   );
 }

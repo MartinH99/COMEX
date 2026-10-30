@@ -1,8 +1,8 @@
 .home {
-    --home-green-dark: #1b5e20;
-    --home-green: #2e7d32;
-    --home-green-light: #e8f5e9;
-    --home-kiwi: #8bc34a;
+    --home-green-dark: #1E3325;
+    --home-green: #2F5A3A;
+    --home-green-light: #EEF5D9;
+    --home-kiwi: #B7D84B;
     --home-text: #1f2937;
     --home-muted: #6b7280;
     color: var(--home-text);

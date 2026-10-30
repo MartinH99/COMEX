@@ -10,16 +10,17 @@ if (!process.env.TURSO_DATABASE_URL) {
   process.exit(1);
 }
 
-const { default: remote, SCHEMA } = await import('../server/db.js');
+const { default: remote, applySchema } = await import('../server/db.js');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const local = createClient({ url: pathToFileURL(path.join(__dirname, '..', 'server', 'comex.db')).href });
 
 // Orden respetando claves foráneas
-const TABLES = ['clients', 'shipments', 'shipment_calibers'];
+const TABLES = ['clients', 'products', 'shipments', 'shipment_calibers', 'notifications', 'prospectos'];
 const force = process.argv.includes('--force');
 
-await remote.batch(SCHEMA, 'write');
+await applySchema(remote);
+await applySchema(local);
 
 const { rows } = await remote.execute('SELECT COUNT(*) AS count FROM clients');
 if (Number(rows[0].count) > 0 && !force) {
