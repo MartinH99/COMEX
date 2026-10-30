@@ -25,10 +25,10 @@ export function CaliberList() {
               {CALIBERS_MASTER.map(c => (
                 <tr key={c.code}>
                   <td className="strong">{c.code}</td>
-                  <td>{c.label}</td>
-                  <td className="num">{c.fruitsBox}</td>
-                  <td className="num">{c.avgWeightGrams} g</td>
-                  <td className="num">{formatUsd(c.defaultPriceKg)} / kg</td>
+                  <td data-label="Denominación">{c.label}</td>
+                  <td data-label="Frutos / caja 10 kg" className="num">{c.fruitsBox}</td>
+                  <td data-label="Peso del fruto" className="num">{c.avgWeightGrams} g</td>
+                  <td data-label="Precio de referencia" className="num">{formatUsd(c.defaultPriceKg)} / kg</td>
                 </tr>
               ))}
             </tbody>

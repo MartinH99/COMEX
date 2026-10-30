@@ -69,13 +69,13 @@ export function Dashboard({ shipments, clients, onNew, onViewAll }) {
                   return (
                     <tr key={s.id}>
                       <td><span className="mono strong">{s.code}</span></td>
-                      <td>W{s.loadWeek}</td>
-                      <td>{client ? `${client.company} (${client.country})` : 'N/A'}</td>
-                      <td>{s.condition} · {s.deal}</td>
-                      <td>{s.product} ({s.fruitType})</td>
-                      <td>{s.port}</td>
-                      <td><StatusBadge status={s.status} /></td>
-                      <td className="num strong">{formatUsd(s.totalUsd)}</td>
+                      <td data-label="Salida">W{s.loadWeek}</td>
+                      <td data-label="Cliente">{client ? `${client.company} (${client.country})` : 'N/A'}</td>
+                      <td data-label="Modalidad">{s.condition} · {s.deal}</td>
+                      <td data-label="Producto">{s.product} ({s.fruitType})</td>
+                      <td data-label="Puerto">{s.port}</td>
+                      <td data-label="Estado"><StatusBadge status={s.status} /></td>
+                      <td data-label="Total USD" className="num strong">{formatUsd(s.totalUsd)}</td>
                     </tr>
                   );
                 })}

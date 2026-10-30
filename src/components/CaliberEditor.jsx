@@ -105,14 +105,14 @@ export function CaliberEditor({ calibres, setCalibres }) {
               {selectedCalibers.map(c => (
                 <tr key={c.code}>
                   <td className="strong">{c.code}</td>
-                  <td>{c.label}</td>
-                  <td className="num">
+                  <td data-label="Denominación">{c.label}</td>
+                  <td data-label="Cajas 10 kg" className="num">
                     <input aria-label={`Cajas ${c.code}`} type="number" min="0" value={calibres[c.code].boxes} onChange={e => handleCaliberBoxChange(c.code, e.target.value)} />
                   </td>
-                  <td className="num">
+                  <td data-label="USD / kg" className="num">
                     <input aria-label={`USD por kg ${c.code}`} type="number" min="0" step="0.01" value={calibres[c.code].priceKg} onChange={e => handleCaliberPriceChange(c.code, e.target.value)} />
                   </td>
-                  <td className="num">{formatUsd(calibres[c.code].boxes * 10 * calibres[c.code].priceKg)}</td>
+                  <td data-label="Subtotal USD" className="num">{formatUsd(calibres[c.code].boxes * 10 * calibres[c.code].priceKg)}</td>
                   <td>
                     <button type="button" className="icon-btn" aria-label={`Quitar calibre ${c.code}`} title="Quitar" onClick={() => handleRemoveCaliber(c.code)}>
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

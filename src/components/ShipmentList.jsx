@@ -248,14 +248,14 @@ export function ShipmentList({ shipments, clients, initialOpenId, activityVersio
                     <Fragment key={s.id}>
                       <tr id={`shipment-${s.id}`} className={`expandable${isOpen ? ' open' : ''}`} aria-expanded={isOpen} onClick={() => setOpenId(isOpen ? null : s.id)}>
                         <td><span className="mono strong">{s.code}</span></td>
-                        <td>{client?.company || 'N/A'}</td>
-                        <td>{s.product}</td>
-                        <td>W{s.loadWeek}</td>
-                        <td>{s.deliveryDate ? formatDate(s.deliveryDate) : (s.etaWeek || '—')}</td>
-                        <td><StatusBadge status={s.status} /></td>
-                        <td className="num">{s.boxes.toLocaleString('en-US')}</td>
-                        <td className="num"><DifferenceBadge shipment={s} /></td>
-                        <td className="num strong">{formatUsd(s.totalUsd)}</td>
+                        <td data-label="Cliente">{client?.company || 'N/A'}</td>
+                        <td data-label="Producto">{s.product}</td>
+                        <td data-label="Salida">W{s.loadWeek}</td>
+                        <td data-label="Entrega est.">{s.deliveryDate ? formatDate(s.deliveryDate) : (s.etaWeek || '—')}</td>
+                        <td data-label="Estado"><StatusBadge status={s.status} /></td>
+                        <td data-label="Cajas" className="num">{s.boxes.toLocaleString('en-US')}</td>
+                        <td data-label="Dif. entrega" className="num"><DifferenceBadge shipment={s} /></td>
+                        <td data-label="Total USD" className="num strong">{formatUsd(s.totalUsd)}</td>
                         <td>
                           <button
                             className="icon-btn"
@@ -296,9 +296,9 @@ export function ShipmentList({ shipments, clients, initialOpenId, activityVersio
               <tfoot>
                 <tr>
                   <td colSpan={6}>{visible.length} {visible.length === 1 ? 'embarque' : 'embarques'}</td>
-                  <td className="num">{totalBoxes.toLocaleString('en-US')}</td>
+                  <td data-label="Cajas" className="num">{totalBoxes.toLocaleString('en-US')}</td>
                   <td />
-                  <td className="num">{formatUsd(totalUsd)}</td>
+                  <td data-label="Total USD" className="num">{formatUsd(totalUsd)}</td>
                   <td />
                 </tr>
               </tfoot>

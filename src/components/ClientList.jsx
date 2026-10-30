@@ -81,14 +81,14 @@ export function ClientList({ clients, onCreate }) {
               {clients.map(c => (
                 <tr key={c.id}>
                   <td className="strong">{c.company}</td>
-                  <td>{c.country}</td>
-                  <td>{c.contact}</td>
-                  <td>
+                  <td data-label="País">{c.country}</td>
+                  <td data-label="Contacto">{c.contact}</td>
+                  <td data-label="Calificación">
                     <span className="stars" aria-label={`${c.rating} de 5`}>
                       {'★'.repeat(c.rating)}<span className="off">{'★'.repeat(5 - c.rating)}</span>
                     </span>
                   </td>
-                  <td>{c.defaultPayment}</td>
+                  <td data-label="Condición de pago">{c.defaultPayment}</td>
                 </tr>
               ))}
             </tbody>

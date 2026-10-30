@@ -6,8 +6,6 @@ const NAV_ITEMS = [
   { id: 'calibers', label: 'Calibres', icon: ['M3 3h7v7H3z', 'M14 3h7v7h-7z', 'M14 14h7v7h-7z', 'M3 14h7v7H3z'] }
 ];
 
-const HOME_ITEM = { id: 'home', label: 'Sitio institucional', icon: ['M3 10.5 12 3l9 7.5', 'M5 9v12h14V9', 'M10 21v-6h4v6'] };
-
 function NavItem({ item, active, onClick }) {
   return (
     <button
@@ -31,7 +29,7 @@ export function Sidebar({ currentTab, setTab, unread, onOpenNotifications }) {
   return (
     <aside className="sidebar">
       <div className="sb-brand">
-        <button className="sb-home" aria-label="COMEX, ir al inicio" title="Ir al inicio" onClick={() => setTab(HOME_ITEM.id)}>
+        <button className="sb-home" aria-label="COMEX, ir al inicio" title="Ir al inicio" onClick={() => setTab('home')}>
           <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
             <circle cx="16" cy="16" r="15" fill="#7A5A32" />
             <circle cx="16" cy="16" r="12.5" fill="#B7D84B" />
@@ -58,9 +56,6 @@ export function Sidebar({ currentTab, setTab, unread, onOpenNotifications }) {
         {NAV_ITEMS.map(item => (
           <NavItem key={item.id} item={item} active={activeTab === item.id} onClick={() => setTab(item.id)} />
         ))}
-        <div className="sb-spacer" />
-        <div className="sb-sep" />
-        <NavItem item={HOME_ITEM} active={activeTab === HOME_ITEM.id} onClick={() => setTab(HOME_ITEM.id)} />
       </nav>
     </aside>
   );

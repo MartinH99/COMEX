@@ -98,15 +98,17 @@ export function ProspectList({ prospects, onNew, onEdit, onDelete, onCreateShipm
                         <div className="strong">{p.company}</div>
                         <div className="kpi-sub">{[p.country, p.contact].filter(Boolean).join(' · ')}</div>
                       </td>
-                      <td>{p.product}</td>
-                      <td>{p.port || '—'}</td>
-                      <td>
-                        {formatDate(p.validUntil)}
-                        {expired && <> <span className="badge alert">Vencida</span></>}
+                      <td data-label="Producto">{p.product}</td>
+                      <td data-label="Puerto">{p.port || '—'}</td>
+                      <td data-label="Validez">
+                        <span>
+                          {formatDate(p.validUntil)}
+                          {expired && <> <span className="badge alert">Vencida</span></>}
+                        </span>
                       </td>
-                      <td><span className={`badge ${STATUS_CLASS[p.status] || 'gray'}`}>{p.status}</span></td>
-                      <td className="num">{p.boxes.toLocaleString('en-US')}</td>
-                      <td className="num strong">{formatUsd(p.totalUsd)}</td>
+                      <td data-label="Estado"><span className={`badge ${STATUS_CLASS[p.status] || 'gray'}`}>{p.status}</span></td>
+                      <td data-label="Cajas" className="num">{p.boxes.toLocaleString('en-US')}</td>
+                      <td data-label="Presupuesto USD" className="num strong">{formatUsd(p.totalUsd)}</td>
                       <td>
                         <div className="row-actions">
                           {p.shipmentId ? (
