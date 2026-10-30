@@ -1,6 +1,7 @@
 import { createClient } from '@libsql/client';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
+import { hashPassword } from './auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -100,6 +101,28 @@ const SCHEMA = [
     shipment_id   INTEGER REFERENCES shipments(id) ON DELETE SET NULL,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT NOT NULL,
+    role          TEXT NOT NULL CHECK (role IN ('admin', 'client')),
+    status        TEXT NOT NULL CHECK (status IN ('active', 'pending', 'disabled')),
+    full_name     TEXT NOT NULL DEFAULT '',
+    company       TEXT NOT NULL DEFAULT '',
+    country       TEXT NOT NULL DEFAULT '',
+    email         TEXT NOT NULL DEFAULT '',
+    client_id     INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+    failed_logins INTEGER NOT NULL DEFAULT 0,
+    locked_until  TEXT,
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)',
   'CREATE INDEX IF NOT EXISTS idx_notifications_shipment ON notifications(shipment_id)',
   'CREATE INDEX IF NOT EXISTS idx_shipments_client ON shipments(client_id)',
   'CREATE INDEX IF NOT EXISTS idx_calibers_shipment ON shipment_calibers(shipment_id)',
@@ -168,6 +191,26 @@ async function seed() {
   ], 'write');
 }
 
+// La clave inicial viene del entorno: el repositorio es público y no puede estar en el código
+async function ensureAdmin() {
+  const { rows } = await db.execute("SELECT COUNT(*) AS count FROM users WHERE role = 'admin'");
+  if (Number(rows[0].count) > 0) return;
+
+  const password = process.env.ADMIN_PASSWORD;
+  if (!password) {
+    console.warn('No hay administrador: definí ADMIN_USERNAME y ADMIN_PASSWORD para crearlo.');
+    return;
+  }
+
+  await db.execute({
+    sql: `
+      INSERT OR IGNORE INTO users (username, password_hash, role, status, full_name)
+      VALUES (?, ?, 'admin', 'active', 'Administrador')
+    `,
+    args: [process.env.ADMIN_USERNAME || 'admin', await hashPassword(password)]
+  });
+}
+
 let initPromise;
 
 // Idempotente: en serverless se llama en cada request pero sólo corre una vez por instancia
@@ -177,6 +220,7 @@ export function initDb() {
       await db.execute('PRAGMA foreign_keys = ON');
       await applySchema();
       await seed();
+      await ensureAdmin();
     })().catch(err => {
       initPromise = undefined;
       throw err;

@@ -43,7 +43,7 @@ const steps = [
   { n: '04', title: 'Embarque', text: 'Consolidación en pallets y despacho al puerto de destino.' },
 ];
  
-export default function Home({ setTab }) {
+export default function Home({ setTab, homeTab = 'dashboard' }) {
   return (
     <div className="home">
       {/* HERO */}
@@ -56,8 +56,8 @@ export default function Home({ setTab }) {
             empacar y exportar fruta fresca a los mercados más exigentes.
           </p>
           <div className="home-hero-actions">
-            <button className="home-btn-primary" onClick={() => setTab('dashboard')}>
-              Ir al Dashboard
+            <button className="home-btn-primary" onClick={() => setTab(homeTab)}>
+              {homeTab === 'dashboard' ? 'Ir al Dashboard' : 'Ver mis embarques'}
             </button>
             <button className="home-btn-secondary" onClick={() => setTab('shipments')}>
               Ver Embarques

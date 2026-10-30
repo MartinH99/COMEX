@@ -1,10 +1,12 @@
 import express from 'express';
-import cors from 'cors';
 import db, { initDb, INSERT_SHIPMENT } from './db.js';
+import {
+  LOCK_MINUTES, MAX_FAILED_LOGINS, SESSION_DAYS, clearedSessionCookie, generateToken, hashPassword,
+  hashToken, readSessionToken, sessionCookie, verifyDummyPassword, verifyPassword
+} from './auth.js';
 
 const app = express();
 
-app.use(cors());
 app.use(express.json());
 
 // Asegurar esquema/semilla antes de atender cualquier request
@@ -14,6 +16,276 @@ app.use(async (req, res, next) => {
     next();
   } catch (error) {
     res.status(500).json({ error: 'Error al inicializar la base de datos: ' + error.message });
+  }
+});
+
+const SELECT_USER = `
+  SELECT
+    u.id, u.username, u.role, u.status, u.full_name AS fullName, u.company, u.country, u.email,
+    u.client_id AS clientId, c.company AS clientCompany, u.created_at AS createdAt
+  FROM users u
+  LEFT JOIN clients c ON c.id = u.client_id
+`;
+
+const USERNAME_PATTERN = /^[A-Za-z0-9._@-]{3,60}$/;
+const MIN_PASSWORD_LENGTH = 8;
+const isValidPassword = (password) => typeof password === 'string' && password.length >= MIN_PASSWORD_LENGTH && password.length <= 200;
+
+// Crea una sesión nueva y deja la cookie en la respuesta
+async function startSession(res, userId) {
+  const token = generateToken();
+  const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  await db.batch([
+    { sql: 'DELETE FROM sessions WHERE expires_at < ?', args: [new Date().toISOString()] },
+    { sql: 'INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)', args: [hashToken(token), userId, expiresAt] }
+  ], 'write');
+  res.setHeader('Set-Cookie', sessionCookie(token));
+}
+
+// Identifica al usuario de la cookie; una cuenta deshabilitada no tiene sesión válida
+app.use('/api', async (req, res, next) => {
+  try {
+    const token = readSessionToken(req);
+    if (token) {
+      const { rows } = await db.execute({
+        sql: `
+          ${SELECT_USER}
+          JOIN sessions s ON s.user_id = u.id
+          WHERE s.token_hash = ? AND s.expires_at > ? AND u.status <> 'disabled'
+        `,
+        args: [hashToken(token), new Date().toISOString()]
+      });
+      req.user = rows[0] ? { ...rows[0] } : null;
+    }
+    next();
+  } catch (error) {
+    res.status(500).json({ error: 'Error al validar la sesión: ' + error.message });
+  }
+});
+
+// POST /api/auth/register: las cuentas nuevas quedan pendientes hasta que un admin las vincule a un cliente
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const fullName = (req.body.fullName || '').trim();
+    const company = (req.body.company || '').trim();
+    const country = (req.body.country || '').trim();
+    const email = (req.body.email || '').trim();
+
+    if (typeof username !== 'string' || !USERNAME_PATTERN.test(username)) {
+      return res.status(400).json({ error: 'El usuario debe tener entre 3 y 60 caracteres, sin espacios.' });
+    }
+    if (!isValidPassword(password)) {
+      return res.status(400).json({ error: `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.` });
+    }
+    if (!fullName || !company || !country || !email) {
+      return res.status(400).json({ error: 'Completá todos los campos.' });
+    }
+
+    let userId;
+    try {
+      const result = await db.execute({
+        sql: `
+          INSERT INTO users (username, password_hash, role, status, full_name, company, country, email)
+          VALUES (?, ?, 'client', 'pending', ?, ?, ?, ?)
+        `,
+        args: [username, await hashPassword(password), fullName, company, country, email]
+      });
+      userId = Number(result.lastInsertRowid);
+    } catch (error) {
+      if (error.message.includes('UNIQUE')) {
+        return res.status(409).json({ error: 'Ese usuario ya existe.' });
+      }
+      throw error;
+    }
+
+    await startSession(res, userId);
+    const { rows } = await db.execute({ sql: `${SELECT_USER} WHERE u.id = ?`, args: [userId] });
+    res.status(201).json({ ...rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al registrar el usuario: ' + error.message });
+  }
+});
+
+// POST /api/auth/login
+app.post('/api/auth/login', async (req, res) => {
+  const invalid = () => res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
+
+  try {
+    const { username, password } = req.body;
+    if (typeof username !== 'string' || typeof password !== 'string') return invalid();
+
+    const { rows } = await db.execute({
+      sql: 'SELECT id, password_hash, status, locked_until FROM users WHERE username = ?',
+      args: [username]
+    });
+    const user = rows[0];
+
+    if (!user) {
+      await verifyDummyPassword(password);
+      return invalid();
+    }
+    if (user.locked_until && user.locked_until > new Date().toISOString()) {
+      return res.status(429).json({ error: `Demasiados intentos. Probá de nuevo en ${LOCK_MINUTES} minutos.` });
+    }
+
+    if (!(await verifyPassword(password, user.password_hash))) {
+      await db.execute({
+        sql: `
+          UPDATE users SET
+            locked_until = CASE WHEN failed_logins + 1 >= ? THEN ? ELSE NULL END,
+            failed_logins = CASE WHEN failed_logins + 1 >= ? THEN 0 ELSE failed_logins + 1 END
+          WHERE id = ?
+        `,
+        args: [MAX_FAILED_LOGINS, new Date(Date.now() + LOCK_MINUTES * 60 * 1000).toISOString(), MAX_FAILED_LOGINS, user.id]
+      });
+      return invalid();
+    }
+    if (user.status === 'disabled') {
+      return res.status(403).json({ error: 'Tu cuenta está deshabilitada.' });
+    }
+
+    await db.execute({ sql: 'UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = ?', args: [user.id] });
+    await startSession(res, user.id);
+    const selected = await db.execute({ sql: `${SELECT_USER} WHERE u.id = ?`, args: [user.id] });
+    res.json({ ...selected.rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al iniciar sesión: ' + error.message });
+  }
+});
+
+// A partir de acá todo requiere sesión
+app.use('/api', (req, res, next) => {
+  if (!req.user) return res.status(401).json({ error: 'Iniciá sesión para continuar.' });
+  next();
+});
+
+// POST /api/auth/logout
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    await db.execute({ sql: 'DELETE FROM sessions WHERE token_hash = ?', args: [hashToken(readSessionToken(req))] });
+    res.setHeader('Set-Cookie', clearedSessionCookie());
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al cerrar sesión: ' + error.message });
+  }
+});
+
+// GET /api/auth/me
+app.get('/api/auth/me', (req, res) => res.json(req.user));
+
+// POST /api/auth/password: cierra las demás sesiones del usuario
+app.post('/api/auth/password', async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!isValidPassword(newPassword)) {
+      return res.status(400).json({ error: `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.` });
+    }
+
+    const { rows } = await db.execute({ sql: 'SELECT password_hash FROM users WHERE id = ?', args: [req.user.id] });
+    if (typeof currentPassword !== 'string' || !(await verifyPassword(currentPassword, rows[0].password_hash))) {
+      return res.status(400).json({ error: 'La contraseña actual es incorrecta.' });
+    }
+
+    await db.batch([
+      { sql: 'UPDATE users SET password_hash = ? WHERE id = ?', args: [await hashPassword(newPassword), req.user.id] },
+      { sql: 'DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?', args: [req.user.id, hashToken(readSessionToken(req))] }
+    ], 'write');
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al cambiar la contraseña: ' + error.message });
+  }
+});
+
+// Lo único que puede hacer un cliente: leer sus propios datos. Todo lo demás es solo para admin
+const CLIENT_ALLOWED_READS = [
+  /^\/api\/clients$/,
+  /^\/api\/shipments$/,
+  /^\/api\/shipments\/\d+\/notifications$/,
+  /^\/api\/prospectos$/
+];
+
+app.use('/api', (req, res, next) => {
+  if (req.user.role === 'admin') return next();
+  const path = req.originalUrl.split('?')[0];
+  if (req.method === 'GET' && CLIENT_ALLOWED_READS.some(pattern => pattern.test(path))) return next();
+  res.status(403).json({ error: 'No tenés permiso para esta acción.' });
+});
+
+const isClient = (req) => req.user.role === 'client';
+
+// GET /api/users
+app.get('/api/users', async (req, res) => {
+  try {
+    const { rows } = await db.execute(`${SELECT_USER} ORDER BY CASE u.status WHEN 'pending' THEN 0 ELSE 1 END, u.id DESC`);
+    res.json(rows.map(row => ({ ...row })));
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener usuarios: ' + error.message });
+  }
+});
+
+// PATCH /api/users/:id: vincular a un cliente, habilitar/deshabilitar o restablecer la contraseña
+app.patch('/api/users/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { clientId, createClient, status, password } = req.body;
+
+    const { rows } = await db.execute({ sql: 'SELECT * FROM users WHERE id = ?', args: [id] });
+    const user = rows[0];
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
+
+    const statements = [];
+
+    if (status !== undefined) {
+      if (!['active', 'disabled'].includes(status)) return res.status(400).json({ error: 'Estado inválido.' });
+      if (id === req.user.id) return res.status(400).json({ error: 'No podés cambiar el estado de tu propia cuenta.' });
+      if (status === 'active' && user.role === 'client' && user.client_id === null && !clientId && !createClient) {
+        return res.status(400).json({ error: 'Vinculá la cuenta a un cliente para activarla.' });
+      }
+      statements.push({ sql: 'UPDATE users SET status = ? WHERE id = ?', args: [status, id] });
+      if (status === 'disabled') {
+        statements.push({ sql: 'DELETE FROM sessions WHERE user_id = ?', args: [id] });
+      }
+    }
+
+    if (clientId !== undefined || createClient) {
+      if (user.role !== 'client') return res.status(400).json({ error: 'Solo se vinculan cuentas de cliente.' });
+
+      let linkedClientId = clientId;
+      if (createClient) {
+        const created = await db.execute({
+          sql: 'INSERT INTO clients (company, country, contact, default_payment) VALUES (?, ?, ?, ?)',
+          args: [user.company, user.country, user.full_name, '']
+        });
+        linkedClientId = Number(created.lastInsertRowid);
+      } else {
+        const exists = await db.execute({ sql: 'SELECT id FROM clients WHERE id = ?', args: [Number(linkedClientId)] });
+        if (exists.rows.length === 0) return res.status(404).json({ error: 'Cliente no encontrado.' });
+      }
+      statements.push({
+        sql: "UPDATE users SET client_id = ?, status = CASE WHEN status = 'pending' THEN 'active' ELSE status END WHERE id = ?",
+        args: [Number(linkedClientId), id]
+      });
+    }
+
+    if (password !== undefined) {
+      if (!isValidPassword(password)) {
+        return res.status(400).json({ error: `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.` });
+      }
+      statements.push({
+        sql: 'UPDATE users SET password_hash = ?, failed_logins = 0, locked_until = NULL WHERE id = ?',
+        args: [await hashPassword(password), id]
+      });
+      statements.push({ sql: 'DELETE FROM sessions WHERE user_id = ?', args: [id] });
+    }
+
+    if (statements.length === 0) return res.status(400).json({ error: 'No hay cambios para aplicar.' });
+    await db.batch(statements, 'write');
+
+    const updated = await db.execute({ sql: `${SELECT_USER} WHERE u.id = ?`, args: [id] });
+    res.json({ ...updated.rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar el usuario: ' + error.message });
   }
 });
 
@@ -85,7 +357,13 @@ const reminderStatements = () => {
 // GET /api/clients
 app.get('/api/clients', async (req, res) => {
   try {
-    const { rows } = await db.execute('SELECT id, company, country, contact, rating, default_payment AS defaultPayment FROM clients ORDER BY company ASC');
+    const { rows } = await db.execute({
+      sql: `
+        SELECT id, company, country, contact, rating, default_payment AS defaultPayment FROM clients
+        ${isClient(req) ? 'WHERE id = ?' : ''} ORDER BY company ASC
+      `,
+      args: isClient(req) ? [req.user.clientId] : []
+    });
     res.json(rows.map(plain));
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener clientes: ' + error.message });
@@ -121,9 +399,16 @@ app.post('/api/clients', async (req, res) => {
 // GET /api/shipments
 app.get('/api/shipments', async (req, res) => {
   try {
+    const scopeArgs = isClient(req) ? [req.user.clientId] : [];
     const [shipmentsRes, calibersRes] = await db.batch([
-      `${SELECT_SHIPMENT} ORDER BY s.id DESC`,
-      'SELECT shipment_id AS shipmentId, code, boxes, price_kg AS priceKg FROM shipment_calibers'
+      { sql: `${SELECT_SHIPMENT} ${isClient(req) ? 'WHERE s.client_id = ?' : ''} ORDER BY s.id DESC`, args: scopeArgs },
+      {
+        sql: `
+          SELECT shipment_id AS shipmentId, code, boxes, price_kg AS priceKg FROM shipment_calibers
+          ${isClient(req) ? 'WHERE shipment_id IN (SELECT id FROM shipments WHERE client_id = ?)' : ''}
+        `,
+        args: scopeArgs
+      }
     ], 'read');
 
     const calibresByShipment = {};
@@ -299,10 +584,18 @@ app.post('/api/shipments/:id/followups', async (req, res) => {
 // GET /api/shipments/:id/notifications
 app.get('/api/shipments/:id/notifications', async (req, res) => {
   try {
-    const { rows } = await db.execute({
-      sql: `${SELECT_NOTIFICATION} WHERE shipment_id = ? ORDER BY id DESC`,
-      args: [Number(req.params.id)]
-    });
+    // Un cliente ve el historial de sus embarques, sin los seguimientos internos
+    const { rows } = await db.execute(isClient(req)
+      ? {
+          sql: `
+            ${SELECT_NOTIFICATION}
+            WHERE shipment_id = ? AND type IN ('created', 'status', 'delivery')
+              AND shipment_id IN (SELECT id FROM shipments WHERE client_id = ?)
+            ORDER BY id DESC
+          `,
+          args: [Number(req.params.id), req.user.clientId]
+        }
+      : { sql: `${SELECT_NOTIFICATION} WHERE shipment_id = ? ORDER BY id DESC`, args: [Number(req.params.id)] });
     res.json(rows.map(plain));
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener el historial: ' + error.message });
@@ -415,6 +708,15 @@ async function parseProspect(body) {
 // GET /api/prospectos
 app.get('/api/prospectos', async (req, res) => {
   try {
+    if (isClient(req)) {
+      // Un cliente ve las propuestas que recibió, sin borradores, perdidos ni notas internas
+      const { rows } = await db.execute({
+        sql: `${SELECT_PROSPECT} WHERE p.client_id = ? AND p.status NOT IN ('Nuevo', 'Perdido') ORDER BY p.id DESC`,
+        args: [req.user.clientId]
+      });
+      return res.json(rows.map(row => ({ ...toProspect(row), notes: null })));
+    }
+
     const { rows } = await db.execute(`${SELECT_PROSPECT} ORDER BY p.id DESC`);
     res.json(rows.map(toProspect));
   } catch (error) {

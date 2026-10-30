@@ -12,12 +12,14 @@ const STATUS_CLASS = {
 
 const isOpen = (prospect) => prospect.status !== 'Perdido' && prospect.status !== 'Convertido';
 
-export function ProspectList({ prospects, onNew, onEdit, onDelete, onCreateShipment, onOpenShipment }) {
+export function ProspectList({ prospects, readOnly, onNew, onEdit, onDelete, onCreateShipment, onOpenShipment }) {
   const [statusFilter, setStatusFilter] = useState('Todos');
   const [convertingId, setConvertingId] = useState(null);
 
   const today = new Date().toLocaleDateString('en-CA');
-  const filters = ['Todos', ...PROSPECT_STATUSES, 'Convertido'];
+  const filters = readOnly
+    ? ['Todos', 'Cotizado', 'En negociación', 'Convertido']
+    : ['Todos', ...PROSPECT_STATUSES, 'Convertido'];
   const visible = statusFilter === 'Todos' ? prospects : prospects.filter(p => p.status === statusFilter);
 
   const open = prospects.filter(isOpen);
@@ -34,10 +36,12 @@ export function ProspectList({ prospects, onNew, onEdit, onDelete, onCreateShipm
   return (
     <section>
       <div className="page-header">
-        <h1>Prospectos</h1>
-        <div className="right">
-          <button className="btn btn-primary" onClick={onNew}>+ Nuevo prospecto</button>
-        </div>
+        <h1>{readOnly ? 'Mis prospectos' : 'Prospectos'}</h1>
+        {!readOnly && (
+          <div className="right">
+            <button className="btn btn-primary" onClick={onNew}>+ Nuevo prospecto</button>
+          </div>
+        )}
       </div>
 
       <div className="kpi-grid">
@@ -73,7 +77,9 @@ export function ProspectList({ prospects, onNew, onEdit, onDelete, onCreateShipm
 
       <div className="section">
         {visible.length === 0 ? (
-          <div className="empty">{prospects.length === 0 ? 'Todavía no hay prospectos. Creá el primero con "+ Nuevo prospecto".' : 'No hay prospectos con este estado.'}</div>
+          <div className="empty">{prospects.length > 0
+            ? 'No hay prospectos con este estado.'
+            : (readOnly ? 'Todavía no tenés propuestas.' : 'Todavía no hay prospectos. Creá el primero con "+ Nuevo prospecto".')}</div>
         ) : (
           <div className="scroll-x">
             <table className="table">
@@ -113,7 +119,7 @@ export function ProspectList({ prospects, onNew, onEdit, onDelete, onCreateShipm
                         <div className="row-actions">
                           {p.shipmentId ? (
                             <button className="btn btn-small" onClick={() => onOpenShipment(p.shipmentId)}>Ver embarque</button>
-                          ) : (
+                          ) : !readOnly && (
                             <>
                               {isOpen(p) && (
                                 <button className="btn btn-small btn-primary" disabled={convertingId === p.id} onClick={() => handleCreateShipment(p)}>
@@ -123,18 +129,20 @@ export function ProspectList({ prospects, onNew, onEdit, onDelete, onCreateShipm
                               <button className="btn btn-small" onClick={() => onEdit(p)}>Editar</button>
                             </>
                           )}
-                          <button
-                            className="icon-btn"
-                            aria-label={`Eliminar prospecto ${p.company}`}
-                            title="Eliminar"
-                            onClick={() => onDelete(p)}
-                          >
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                              <path d="M3 6h18" />
-                              <path d="M8 6V4h8v2" />
-                              <path d="M19 6l-1 14H6L5 6" />
-                            </svg>
-                          </button>
+                          {!readOnly && (
+                            <button
+                              className="icon-btn"
+                              aria-label={`Eliminar prospecto ${p.company}`}
+                              title="Eliminar"
+                              onClick={() => onDelete(p)}
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M3 6h18" />
+                                <path d="M8 6V4h8v2" />
+                                <path d="M19 6l-1 14H6L5 6" />
+                              </svg>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

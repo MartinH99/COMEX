@@ -34,6 +34,31 @@ CREATE TABLE IF NOT EXISTS shipments (
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Tabla de Usuarios: administradores y clientes
+CREATE TABLE IF NOT EXISTS users (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  password_hash TEXT NOT NULL,
+  role          TEXT NOT NULL CHECK (role IN ('admin', 'client')),
+  status        TEXT NOT NULL CHECK (status IN ('active', 'pending', 'disabled')),
+  full_name     TEXT NOT NULL DEFAULT '',
+  company       TEXT NOT NULL DEFAULT '',
+  country       TEXT NOT NULL DEFAULT '',
+  email         TEXT NOT NULL DEFAULT '',
+  client_id     INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+  failed_logins INTEGER NOT NULL DEFAULT 0,
+  locked_until  TEXT,
+  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabla de Sesiones: solo guarda el hash del token
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Tabla de Notificaciones y seguimientos de embarques
 CREATE TABLE IF NOT EXISTS notifications (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,

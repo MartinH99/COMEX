@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
+import { apiFetch } from '../api';
 import { NOTIFICATION_TYPES } from './NotificationCenter';
 import { Modal, StatusBadge, formatDate, formatDateTime, formatUsd } from './ui';
 
@@ -69,14 +70,14 @@ function DeliveryModal({ shipment, onSave, onClose }) {
   );
 }
 
-function Tracking({ shipment, activityVersion, onChangeStatus, onRegisterDelivery, onAddFollowUp }) {
+function Tracking({ shipment, readOnly, activityVersion, onChangeStatus, onRegisterDelivery, onAddFollowUp }) {
   const [history, setHistory] = useState([]);
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let ignore = false;
-    fetch(`/api/shipments/${shipment.id}/notifications`)
+    apiFetch(`/api/shipments/${shipment.id}/notifications`)
       .then(res => (res.ok ? res.json() : []))
       .then(data => { if (!ignore) setHistory(data); })
       .catch(err => console.warn('No se pudo cargar el historial:', err));
@@ -103,24 +104,28 @@ function Tracking({ shipment, activityVersion, onChangeStatus, onRegisterDeliver
   return (
     <div className="tracking">
       <h3>Seguimiento</h3>
-      <div className="tracking-status">
-        <label htmlFor={`status-${shipment.id}`}>Estado</label>
-        <select id={`status-${shipment.id}`} value={shipment.status} onChange={handleStatusChange}>
-          {SHIPMENT_STATUSES.map(status => <option key={status} value={status}>{status}</option>)}
-        </select>
-      </div>
-      <form className="tracking-form" onSubmit={handleSubmit}>
-        <input
-          type="text"
-          aria-label="Nuevo seguimiento"
-          placeholder="Ej: Contenedor cargado en puerto"
-          maxLength={500}
-          value={note}
-          onChange={e => setNote(e.target.value)}
-          required
-        />
-        <button type="submit" className="btn btn-small" disabled={saving}>Agregar</button>
-      </form>
+      {!readOnly && (
+        <>
+          <div className="tracking-status">
+            <label htmlFor={`status-${shipment.id}`}>Estado</label>
+            <select id={`status-${shipment.id}`} value={shipment.status} onChange={handleStatusChange}>
+              {SHIPMENT_STATUSES.map(status => <option key={status} value={status}>{status}</option>)}
+            </select>
+          </div>
+          <form className="tracking-form" onSubmit={handleSubmit}>
+            <input
+              type="text"
+              aria-label="Nuevo seguimiento"
+              placeholder="Ej: Contenedor cargado en puerto"
+              maxLength={500}
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              required
+            />
+            <button type="submit" className="btn btn-small" disabled={saving}>Agregar</button>
+          </form>
+        </>
+      )}
       {history.length === 0 ? (
         <span className="kpi-sub">Sin movimientos registrados.</span>
       ) : (
@@ -137,7 +142,7 @@ function Tracking({ shipment, activityVersion, onChangeStatus, onRegisterDeliver
   );
 }
 
-function CaliberDetail({ shipment, onRegisterDelivery }) {
+function CaliberDetail({ shipment, readOnly, onRegisterDelivery }) {
   const rows = Object.entries(shipment.calibres || {}).filter(([, item]) => item.boxes > 0);
   const isRegistered = shipment.deliveredBoxes !== null && shipment.deliveredBoxes !== undefined;
 
@@ -177,16 +182,18 @@ function CaliberDetail({ shipment, onRegisterDelivery }) {
           </tbody>
         </table>
       )}
-      <div className="detail-actions">
-        <button className="btn btn-small" onClick={() => onRegisterDelivery(shipment)}>
-          {isRegistered ? 'Editar entrega' : 'Registrar entrega'}
-        </button>
-      </div>
+      {!readOnly && (
+        <div className="detail-actions">
+          <button className="btn btn-small" onClick={() => onRegisterDelivery(shipment)}>
+            {isRegistered ? 'Editar entrega' : 'Registrar entrega'}
+          </button>
+        </div>
+      )}
     </>
   );
 }
 
-export function ShipmentList({ shipments, clients, initialOpenId, activityVersion, onNew, onDelete, onRegisterDelivery, onChangeStatus, onAddFollowUp }) {
+export function ShipmentList({ shipments, clients, readOnly, initialOpenId, activityVersion, onNew, onDelete, onRegisterDelivery, onChangeStatus, onAddFollowUp }) {
   const [statusFilter, setStatusFilter] = useState('Todos');
   const [openId, setOpenId] = useState(initialOpenId ?? null);
   const [deliveryShipmentId, setDeliveryShipmentId] = useState(null);
@@ -207,7 +214,7 @@ export function ShipmentList({ shipments, clients, initialOpenId, activityVersio
   return (
     <section>
       <div className="page-header">
-        <h1>Embarques</h1>
+        <h1>{readOnly ? 'Mis embarques' : 'Embarques'}</h1>
         <div className="pills">
           {statuses.map(status => (
             <button key={status} className={statusFilter === status ? 'active' : ''} onClick={() => setStatusFilter(status)}>
@@ -215,9 +222,11 @@ export function ShipmentList({ shipments, clients, initialOpenId, activityVersio
             </button>
           ))}
         </div>
-        <div className="right">
-          <button className="btn btn-primary" onClick={onNew}>+ Nuevo embarque</button>
-        </div>
+        {!readOnly && (
+          <div className="right">
+            <button className="btn btn-primary" onClick={onNew}>+ Nuevo embarque</button>
+          </div>
+        )}
       </div>
 
       <div className="section">
@@ -256,30 +265,33 @@ export function ShipmentList({ shipments, clients, initialOpenId, activityVersio
                         <td data-label="Cajas" className="num">{s.boxes.toLocaleString('en-US')}</td>
                         <td data-label="Dif. entrega" className="num"><DifferenceBadge shipment={s} /></td>
                         <td data-label="Total USD" className="num strong">{formatUsd(s.totalUsd)}</td>
-                        <td>
-                          <button
-                            className="icon-btn"
-                            aria-label={`Eliminar embarque ${s.code}`}
-                            title="Eliminar"
-                            onClick={e => { e.stopPropagation(); onDelete(s); }}
-                          >
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                              <path d="M3 6h18" />
-                              <path d="M8 6V4h8v2" />
-                              <path d="M19 6l-1 14H6L5 6" />
-                            </svg>
-                          </button>
-                        </td>
+                        {readOnly ? <td /> : (
+                          <td>
+                            <button
+                              className="icon-btn"
+                              aria-label={`Eliminar embarque ${s.code}`}
+                              title="Eliminar"
+                              onClick={e => { e.stopPropagation(); onDelete(s); }}
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M3 6h18" />
+                                <path d="M8 6V4h8v2" />
+                                <path d="M19 6l-1 14H6L5 6" />
+                              </svg>
+                            </button>
+                          </td>
+                        )}
                       </tr>
                       {isOpen && (
                         <tr className="detail-row">
                           <td colSpan={10}>
                             <div className="detail-grid">
                               <div>
-                                <CaliberDetail shipment={s} onRegisterDelivery={shipment => setDeliveryShipmentId(shipment.id)} />
+                                <CaliberDetail shipment={s} readOnly={readOnly} onRegisterDelivery={shipment => setDeliveryShipmentId(shipment.id)} />
                               </div>
                               <Tracking
                                 shipment={s}
+                                readOnly={readOnly}
                                 activityVersion={activityVersion}
                                 onChangeStatus={onChangeStatus}
                                 onRegisterDelivery={shipment => setDeliveryShipmentId(shipment.id)}

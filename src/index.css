@@ -256,6 +256,34 @@ table.table td input { padding: 5px 8px; font-size: 13px; text-align: right; max
 .toast.ok { background: #1E6B34; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
+/* ===== INGRESO ===== */
+.login-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.login-card { width: 100%; max-width: 380px; padding: 28px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--panel); box-shadow: var(--shadow); }
+.login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+.login-name { font-family: var(--font-title); font-size: 20px; font-weight: 700; letter-spacing: .02em; }
+.login-sub { margin: 6px 0 18px; font-size: 13px; color: var(--text-soft); }
+.login-field { margin-bottom: 14px; }
+.login-error { margin-bottom: 14px; padding: 10px 12px; border-radius: var(--radius); background: var(--alert-bg); color: var(--alert-tx); font-size: 13px; }
+.login-submit { width: 100%; }
+.login-switch { margin: 16px 0 0; font-size: 13px; text-align: center; color: var(--text-soft); }
+.link-btn { padding: 0; border: none; background: transparent; color: var(--highlight); font: 600 13px var(--font); text-decoration: underline; cursor: pointer; }
+
+/* Usuario en la barra lateral */
+.sb-user { display: flex; align-items: center; gap: 9px; margin-top: 10px; padding: 12px 4px 0; border-top: 1px solid rgba(255,255,255,.12); }
+.sb-avatar { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-size: 13px; font-weight: 700; }
+.sb-user-text { flex: 1; min-width: 0; }
+.sb-user-name { overflow: hidden; font-size: 12.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.sb-link { padding: 0; border: none; background: transparent; color: var(--sb-faint); font: 500 11px var(--font); cursor: pointer; }
+.sb-link:hover { color: var(--sb-text); text-decoration: underline; }
+.sb-logout { flex-shrink: 0; font-size: 12px; font-weight: 600; }
+.nav-count { margin-left: auto; min-width: 18px; padding: 1px 5px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
+
+/* Usuarios y portal de clientes */
+.user-link { display: flex; align-items: center; gap: 6px; }
+.user-link select { min-width: 150px; padding: 5px 8px; font-size: 13px; }
+.notice { max-width: 560px; padding: 20px; }
+.notice p { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-soft); }
+
 /* ===== PROSPECTOS ===== */
 .page-filter { margin-bottom: 12px; }
 .row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; white-space: nowrap; }
@@ -359,6 +387,9 @@ table.table td .tracking-form input { flex: 1; min-width: 0; max-width: none; ma
   /* Objetivos táctiles cómodos y campos que no disparan el zoom de iOS */
   .btn, .pills button, .nav-item { min-height: 44px; }
   .icon-btn, .bell { min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }
+  .sb-link { min-height: 36px; font-size: 12px; }
+  .user-link { flex-wrap: wrap; justify-content: flex-end; }
+  .row-actions { flex-wrap: wrap; white-space: normal; }
   .sb-home { min-height: 44px; }
   input, select, textarea, select.caliber-picker, .tracking-status select, table.table td input { min-height: 44px; font-size: 16px; }
 
