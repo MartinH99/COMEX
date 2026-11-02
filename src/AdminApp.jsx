@@ -403,6 +403,7 @@ export default function AdminApp({ user, onLogout }) {
         {tab === 'home' && <Home setTab={setTab} />}
         {tab === 'dashboard' && (
           <Dashboard
+            user={user}
             shipments={shipments}
             clients={clients}
             onNew={openBlankShipmentForm}

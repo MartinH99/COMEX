@@ -1,329 +1,475 @@
 .home {
-    --home-green-dark: #1E3325;
-    --home-green: #2F5A3A;
-    --home-green-light: #EEF5D9;
-    --home-kiwi: #B7D84B;
-    --home-text: #1f2937;
-    --home-muted: #6b7280;
-    color: var(--home-text);
-  }
-   
-  .home h2 {
-    font-size: 2rem;
-    margin: 0 0 1rem;
-    color: var(--home-green-dark);
-  }
-   
-  .home h3 {
-    margin: 0.5rem 0;
-    font-size: 1.15rem;
-  }
-   
-  .home p {
-    line-height: 1.6;
-    color: var(--home-muted);
-  }
-   
-  .home-center {
-    text-align: center;
-    margin-bottom: 2.5rem !important;
-  }
-   
-  /* HERO */
-  .home-hero {
-    position: relative;
-    overflow: hidden;
-    background: var(--home-green-dark);
-    color: #fff;
-    padding: 7rem 2rem;
-    text-align: center;
-  }
+  --home-green-dark: #1E3325;
+  --home-green: #2F5A3A;
+  --home-green-light: #EEF5D9;
+  --home-kiwi: #B7D84B;
+  --home-text: #1F2A22;
+  --home-muted: #5C665E;
+  color: var(--home-text);
+  overflow: hidden;
+}
 
-  /* La foto va en su propia capa para poder moverla apenas sin mover el texto */
+.home h2 {
+  max-width: 640px;
+  margin: 0;
+  font-size: clamp(1.7rem, 3vw, 2.5rem);
+  font-weight: 600;
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+  color: var(--home-green-dark);
+}
+
+.home h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.home p {
+  margin: 0;
+  line-height: 1.7;
+  color: var(--home-muted);
+}
+
+.home-kicker {
+  display: inline-block;
+  margin-bottom: 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #4F7415;
+}
+
+.home-kicker-light {
+  color: #39540E;
+}
+
+/* Aparición suave al hacer scroll */
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.home-grid > .reveal:nth-child(2), .home-steps > .reveal:nth-child(2) { transition-delay: 0.08s; }
+.home-grid > .reveal:nth-child(3), .home-steps > .reveal:nth-child(3) { transition-delay: 0.16s; }
+.home-grid > .reveal:nth-child(4), .home-steps > .reveal:nth-child(4) { transition-delay: 0.24s; }
+
+/* PORTADA */
+.home-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: min(88vh, 780px);
+  overflow: hidden;
+  padding: 6rem clamp(1.5rem, 6vw, 5.5rem);
+  background: var(--home-green-dark);
+  color: #fff;
+}
+
+/* La foto va en su propia capa para poder moverla apenas sin mover el texto */
+.home-hero-photo {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(95deg, rgba(20, 36, 26, 0.9) 0%, rgba(20, 36, 26, 0.68) 48%, rgba(20, 36, 26, 0.22) 100%),
+    url('/landing/huerto.webp') center 45% / cover no-repeat;
+  animation: home-hero-drift 30s ease-in-out infinite alternate;
+}
+
+@keyframes home-hero-drift {
+  from { transform: scale(1); }
+  to { transform: scale(1.07); }
+}
+
+.home-hero-content {
+  position: relative;
+  max-width: 660px;
+  animation: home-hero-in 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes home-hero-in {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
+}
+
+.home-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.home-eyebrow::before {
+  content: '';
+  width: 28px;
+  height: 2px;
+  background: var(--home-kiwi);
+}
+
+.home-hero h1 {
+  margin: 0 0 1.4rem;
+  font-size: clamp(2.3rem, 5vw, 4rem);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+
+.home-hero h1 em {
+  font-style: normal;
+  color: var(--home-kiwi);
+}
+
+.home .home-hero p {
+  max-width: 540px;
+  margin-bottom: 2.2rem;
+  font-size: 1.08rem;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.home-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+
+.home-btn-primary,
+.home-btn-secondary {
+  min-height: 48px;
+  padding: 0.8rem 1.7rem;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, background 0.2s, box-shadow 0.2s;
+}
+
+.home-btn-primary {
+  border: 1px solid var(--home-kiwi);
+  background: var(--home-kiwi);
+  color: var(--home-green-dark);
+}
+
+.home-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+}
+
+.home-btn-secondary {
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  backdrop-filter: blur(6px);
+}
+
+.home-btn-secondary:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.home-btn-primary:focus-visible,
+.home-btn-secondary:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* SECCIONES */
+.home-section {
+  padding: clamp(4rem, 8vw, 7rem) clamp(1.5rem, 5vw, 4rem);
+}
+
+.home-section > * {
+  max-width: 1160px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.home-heading {
+  margin-bottom: 3rem;
+}
+
+/* QUIÉNES SOMOS */
+.home-about-section {
+  background: var(--bg, #F5F3EC);
+}
+
+.home-about {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(2.5rem, 6vw, 5.5rem);
+  align-items: center;
+}
+
+.home-about-text h2 {
+  margin-bottom: 1.4rem;
+}
+
+.home-about-text p + p {
+  margin-top: 1rem;
+}
+
+.home-about-media {
+  position: relative;
+  margin-bottom: 3rem;
+}
+
+.home-about-media img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 5 / 4;
+  border-radius: 20px;
+  object-fit: cover;
+  box-shadow: 0 24px 50px rgba(30, 51, 37, 0.2);
+}
+
+.home-about-card {
+  position: absolute;
+  right: -1rem;
+  bottom: -3rem;
+  width: min(82%, 380px);
+  padding: 1.6rem 1.8rem;
+  border-radius: 16px;
+  background: var(--home-green-dark);
+  color: #fff;
+  box-shadow: 0 18px 40px rgba(20, 36, 26, 0.32);
+}
+
+.home-about-card h3 {
+  color: var(--home-kiwi);
+}
+
+.home .home-about-card p {
+  font-size: 0.93rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+/* FONDOS DE FOTO */
+.home-section-photo {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.home-photo-orchard {
+  background-image:
+    linear-gradient(rgba(233, 241, 208, 0.72), rgba(233, 241, 208, 0.82)),
+    url('/landing/huerto-claro.webp');
+}
+
+.home-photo-ship {
+  background-image:
+    linear-gradient(rgba(245, 243, 236, 0.84), rgba(245, 243, 236, 0.86) 50%, rgba(245, 243, 236, 0.46)),
+    url('/landing/carga.webp');
+  background-position: center bottom;
+  padding-bottom: clamp(7rem, 12vw, 11rem);
+}
+
+.home-photo-ship p {
+  color: #434D45;
+}
+
+/* TARJETAS */
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.25rem;
+}
+
+.home-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.home-card {
+  padding: 1.8rem 1.5rem;
+  border-radius: 16px;
+  transition: transform 0.25s, box-shadow 0.25s, opacity 0.7s ease;
+}
+
+.home-glass {
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 10px 28px rgba(30, 51, 37, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+.home-card.is-visible:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 18px 38px rgba(30, 51, 37, 0.16);
+}
+
+.home-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  margin-bottom: 1.1rem;
+  border-radius: 14px;
+  background: var(--home-green-dark);
+  color: var(--home-kiwi);
+}
+
+.home-glass p {
+  font-size: 0.93rem;
+  color: #454F47;
+}
+
+/* PRODUCTOS */
+.home-product {
+  overflow: hidden;
+  border: 1px solid var(--border, #E7E4DA);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 6px 20px rgba(30, 51, 37, 0.06);
+  transition: box-shadow 0.25s, opacity 0.7s ease, transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.home-product.is-visible:hover {
+  box-shadow: 0 18px 38px rgba(30, 51, 37, 0.14);
+}
+
+.home-product-image {
+  overflow: hidden;
+  aspect-ratio: 8 / 5;
+  background: var(--home-green-light);
+}
+
+.home-product-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.home-product:hover .home-product-image img {
+  transform: scale(1.05);
+}
+
+.home-product-body {
+  padding: 1.4rem 1.5rem 1.6rem;
+}
+
+.home-product-body p {
+  font-size: 0.93rem;
+}
+
+/* PROCESO */
+.home-steps {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.home-steps::before {
+  content: '';
+  position: absolute;
+  top: 26px;
+  left: 26px;
+  right: 12%;
+  height: 2px;
+  background: rgba(47, 90, 58, 0.25);
+}
+
+.home-step {
+  position: relative;
+}
+
+.home-step-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 1.1rem;
+  border-radius: 50%;
+  background: var(--home-green-dark);
+  box-shadow: 0 0 0 6px rgba(245, 243, 236, 0.9);
+  color: var(--home-kiwi);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.home-step p {
+  font-size: 0.93rem;
+}
+
+/* PIE */
+.home-footer {
+  padding: 2.8rem clamp(1.5rem, 5vw, 4rem);
+  background: #16261B;
+  text-align: center;
+}
+
+.home-footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+  font-family: var(--font-title, inherit);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #F4F7EC;
+}
+
+.home .home-footer p {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.home .home-footer .home-credits {
+  max-width: 760px;
+  margin: 0.5rem auto 0;
+  font-size: 0.74rem;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.home-credits a {
+  color: inherit;
+}
+
+@media (max-width: 1000px) {
+  .home-grid, .home-steps { grid-template-columns: repeat(2, 1fr); }
+  .home-grid-3 { grid-template-columns: repeat(3, 1fr); }
+  .home-steps::before { display: none; }
+}
+
+@media (max-width: 820px) {
+  .home-about { grid-template-columns: 1fr; }
+  .home-about-card { right: 0.75rem; }
+  .home-grid-3 { grid-template-columns: 1fr; }
   .home-hero-photo {
-    position: absolute;
-    inset: 0;
     background:
-      linear-gradient(180deg, rgba(30, 51, 37, 0.78), rgba(30, 51, 37, 0.86)),
-      url('/landing/huerto.webp') center 40% / cover no-repeat;
-    animation: home-hero-drift 28s ease-in-out infinite alternate;
+      linear-gradient(180deg, rgba(20, 36, 26, 0.78), rgba(20, 36, 26, 0.84)),
+      url('/landing/huerto.webp') center 45% / cover no-repeat;
   }
+}
 
-  @keyframes home-hero-drift {
-    from { transform: scale(1); }
-    to { transform: scale(1.06); }
-  }
+@media (max-width: 560px) {
+  .home-grid, .home-steps { grid-template-columns: 1fr; }
+  .home-hero { min-height: 0; padding-top: 4.5rem; padding-bottom: 4.5rem; }
+}
 
-  @media (prefers-reduced-motion: reduce) {
-    .home-hero-photo { animation: none; }
-  }
-   
-  .home-hero-content {
-    position: relative;
-    max-width: 800px;
-    margin: 0 auto;
-  }
-   
-  .home-badge {
-    display: inline-block;
-    background: rgba(255, 255, 255, 0.15);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    padding: 0.4rem 1rem;
-    border-radius: 999px;
-    font-size: 0.9rem;
-    margin-bottom: 1.5rem;
-  }
-   
-  .home-hero h1 {
-    font-size: 3rem;
-    line-height: 1.15;
-    margin: 0 0 1.25rem;
-  }
-   
-  .home-hero p {
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 1.15rem;
-    margin-bottom: 2rem;
-  }
-   
-  .home-hero-actions {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-   
-  .home-btn-primary,
-  .home-btn-secondary {
-    padding: 0.85rem 1.75rem;
-    border-radius: 8px;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-    border: 2px solid #fff;
-    transition: transform 0.15s, background 0.15s;
-  }
-   
-  .home-btn-primary {
-    background: #fff;
-    color: var(--home-green-dark);
-  }
-   
-  .home-btn-secondary {
-    background: transparent;
-    color: #fff;
-  }
-   
-  .home-btn-primary:hover,
-  .home-btn-secondary:hover {
-    transform: translateY(-2px);
-  }
-   
-  .home-btn-secondary:hover {
-    background: rgba(255, 255, 255, 0.1);
-  }
-   
-  /* STATS */
-  .home-stats {
-    max-width: 1100px;
-    margin: -3rem auto 0;
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    padding: 2rem;
-    position: relative;
-  }
-   
-  .home-stat {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-  }
-   
-  .home-stat + .home-stat {
-    border-left: 1px solid #e5e7eb;
-  }
-   
-  .home-stat-value {
-    font-size: 2.25rem;
-    font-weight: 700;
-    color: var(--home-green);
-  }
-   
-  .home-stat-label {
-    color: var(--home-muted);
-    font-size: 0.95rem;
-  }
-   
-  /* SECCIONES */
-  .home-section {
-    padding: 5rem 2rem;
-  }
-   
-  .home-section > * {
-    max-width: 1100px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-   
-  .home-section-alt {
-    background: var(--home-green-light);
-  }
-
-  /* Fotos muy veladas: el fondo acompaña y el texto se lee como sobre un color liso */
-  .home-section-photo {
-    background-position: center;
-    background-size: cover;
-    background-repeat: no-repeat;
-  }
-
-  .home-photo-orchard {
-    background-image:
-      linear-gradient(rgba(238, 245, 217, 0.9), rgba(238, 245, 217, 0.93)),
-      url('/landing/huerto-claro.webp');
-  }
-
-  .home-photo-ship {
-    background-image:
-      linear-gradient(rgba(245, 243, 236, 0.88), rgba(245, 243, 236, 0.93)),
-      url('/landing/carga.webp');
-    background-position: center bottom;
-  }
-
-  .home-photo-ship p {
-    color: #4b5563;
-  }
-   
-  .home-about {
-    display: grid;
-    grid-template-columns: 1.3fr 1fr;
-    gap: 3rem;
-    align-items: center;
-  }
-   
-  .home-about-card {
-    background:
-      linear-gradient(rgba(30, 51, 37, 0.82), rgba(30, 51, 37, 0.88)),
-      url('/landing/huerto-claro.webp') center / cover no-repeat;
-    color: #fff;
-    padding: 2.5rem;
-    border-radius: 12px;
-  }
-   
-  .home-about-card h3 {
-    font-size: 1.4rem;
-  }
-   
-  .home-about-card p {
-    color: rgba(255, 255, 255, 0.9);
-  }
-   
-  /* GRID / CARDS */
-  .home-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 1.5rem;
-  }
-   
-  .home-grid-3 {
-    grid-template-columns: repeat(3, 1fr);
-  }
-   
-  .home-card {
-    background: #fff;
-    border-radius: 12px;
-    padding: 2rem 1.5rem;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
-    transition: transform 0.2s, box-shadow 0.2s;
-  }
-   
-  .home-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1);
-  }
-   
-  .home-card-icon {
-    font-size: 2.25rem;
-  }
-   
-  .home-product {
-    border-top: 4px solid var(--home-kiwi);
-  }
-   
-  .home-step {
-    text-align: center;
-    padding: 1rem;
-  }
-   
-  .home-step-n {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    background: var(--home-green);
-    color: #fff;
-    font-weight: 700;
-    font-size: 1.1rem;
-  }
-   
-  /* CTA */
-  .home-cta {
-    background: var(--home-green-dark);
-    color: #fff;
-    text-align: center;
-    padding: 4rem 2rem;
-  }
-   
-  .home .home-cta h2 {
-    color: #fff;
-  }
-   
-  .home .home-cta p {
-    color: rgba(255, 255, 255, 0.85);
-  }
-   
-  .home-contact {
-    display: flex;
-    gap: 2rem;
-    justify-content: center;
-    flex-wrap: wrap;
-    margin-top: 1.5rem;
-    font-weight: 500;
-  }
-   
-  .home-credits {
-    display: block;
-    margin-top: 0.4rem;
-    font-size: 0.75rem;
-    opacity: 0.85;
-  }
-
-  .home-credits a {
-    color: inherit;
-  }
-
-  .home-footer {
-    background: #16261b;
-    color: rgba(255, 255, 255, 0.7);
-    text-align: center;
-    padding: 1.25rem;
-    font-size: 0.85rem;
-  }
-   
-  /* RESPONSIVE */
-  @media (max-width: 900px) {
-    .home-hero h1 { font-size: 2.2rem; }
-    .home-stats { grid-template-columns: repeat(2, 1fr); gap: 1.5rem; margin: -2rem 1rem 0; }
-    .home-stat + .home-stat { border-left: none; }
-    .home-about { grid-template-columns: 1fr; }
-    .home-grid, .home-grid-3 { grid-template-columns: repeat(2, 1fr); }
-  }
-   
-  @media (max-width: 560px) {
-    .home-grid, .home-grid-3 { grid-template-columns: 1fr; }
-  }
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-photo, .home-hero-content { animation: none; }
+  .reveal { opacity: 1; transform: none; transition: none; }
+}

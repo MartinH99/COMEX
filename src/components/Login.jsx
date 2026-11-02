@@ -38,6 +38,12 @@ export function Login({ onAuthenticated }) {
 
   return (
     <main className="login-screen">
+      <aside className="login-photo" aria-hidden="true">
+        <div className="login-photo-text">
+          <span>Gestión de exportaciones</span>
+          <p>Del campo al mundo, todo en un solo lugar.</p>
+        </div>
+      </aside>
       <form className="login-card" onSubmit={handleSubmit}>
         <div className="login-brand">
           <svg width="36" height="36" viewBox="0 0 32 32" aria-hidden="true">

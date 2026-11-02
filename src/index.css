@@ -258,9 +258,13 @@ table.table td input { padding: 5px 8px; font-size: 13px; text-align: right; max
 @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* ===== INGRESO ===== */
-.login-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
-.login-card { width: 100%; max-width: 380px; padding: 28px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--panel); box-shadow: var(--shadow); }
+.login-screen { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(420px, 1fr); }
+.login-photo { position: relative; display: flex; align-items: flex-end; padding: clamp(32px, 5vw, 64px); background: linear-gradient(180deg, rgba(20,36,26,.28), rgba(20,36,26,.84)), url('/landing/huerto.webp') center / cover no-repeat; color: #fff; }
+.login-photo-text span { display: inline-block; margin-bottom: 10px; font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+.login-photo-text p { max-width: 460px; margin: 0; font-family: var(--font-title); font-size: clamp(26px, 3vw, 38px); font-weight: 600; line-height: 1.15; letter-spacing: -.02em; }
+.login-card { align-self: center; justify-self: center; width: 100%; max-width: 400px; padding: 40px 32px; }
 .login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+.login-card h1 { font-size: 26px; letter-spacing: -.02em; }
 .login-name { font-family: var(--font-title); font-size: 20px; font-weight: 700; letter-spacing: .02em; }
 .login-sub { margin: 6px 0 18px; font-size: 13px; color: var(--text-soft); }
 .login-field { margin-bottom: 14px; }
@@ -402,6 +406,53 @@ table.table td .tracking-form input { flex: 1; min-width: 0; max-width: none; ma
 .timeline li { padding-left: 10px; border-left: 2px solid var(--border-input); font-size: 12.5px; line-height: 1.4; overflow-wrap: anywhere; }
 .timeline .when { display: block; font-size: 11px; color: var(--text-soft); }
 
+/* ===== PULIDO VISUAL ===== */
+@keyframes page-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.main-content > section, .main-content > form { animation: page-in .28s ease-out; }
+h1 { letter-spacing: -.02em; }
+.page-header h1 { font-size: 25px; }
+
+.sidebar { background: linear-gradient(180deg, rgba(30,51,37,.93), rgba(19,34,25,.97)), url('/landing/huerto-claro.webp') center / cover no-repeat; }
+.nav-item { transition: background .18s, color .18s, transform .18s; }
+.nav-item:hover { transform: translateX(2px); }
+.nav-item.active { background: rgba(183,216,75,.14); color: #fff; }
+.nav-item.active svg { color: var(--accent); }
+
+.btn { transition: background .15s, border-color .15s, color .15s, transform .15s, box-shadow .15s; }
+.btn:not(:disabled):active { transform: translateY(1px); }
+.btn-primary { box-shadow: 0 2px 8px rgba(30,51,37,.22); }
+.btn-primary:not(:disabled):hover { box-shadow: 0 6px 16px rgba(30,51,37,.28); transform: translateY(-1px); }
+
+.kpi { position: relative; overflow: hidden; transition: transform .2s, box-shadow .2s; }
+.kpi:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(30,51,37,.09); }
+.kpi-icon { float: right; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; margin: -2px -4px 0 8px; border-radius: 10px; background: var(--tint); color: var(--tint-tx); }
+
+.section, .list-filters { box-shadow: 0 1px 2px rgba(30,51,37,.04), 0 6px 18px rgba(30,51,37,.05); }
+table.table th { font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; }
+table.table tbody tr { transition: background .12s; }
+table.table tbody tr:hover td { background: #F8F9F1; }
+
+.badge { display: inline-flex; align-items: center; gap: 5px; }
+.badge.ok::before, .badge.pend::before, .badge.alert::before, .badge.brand::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.modal { animation: page-in .2s ease-out; }
+.overlay, .drawer-overlay { backdrop-filter: blur(2px); }
+
+.welcome { position: relative; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; padding: 28px 30px; overflow: hidden; border-radius: 18px; background: linear-gradient(100deg, rgba(20,36,26,.93) 0%, rgba(20,36,26,.72) 55%, rgba(20,36,26,.38) 100%), url('/landing/huerto.webp') center 40% / cover no-repeat; color: #fff; box-shadow: 0 10px 28px rgba(30,51,37,.18); }
+.welcome-date { font-size: 12px; font-weight: 600; letter-spacing: .04em; color: var(--accent); }
+.welcome-date::first-letter { text-transform: uppercase; }
+.welcome h1 { margin: 4px 0 4px; font-size: 28px; }
+.welcome p { margin: 0; font-size: 14px; color: rgba(255,255,255,.86); }
+.welcome-action { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.welcome-action:hover { border-color: #C6E463; background: #C6E463; color: var(--on-accent); transform: translateY(-1px); }
+
+.chart-column-bar, .chart-ranking-bar { transition: filter .15s; }
+.chart-column:hover .chart-column-bar { filter: brightness(.88); }
+
+@media (prefers-reduced-motion: reduce) {
+  .main-content > section, .main-content > form, .modal { animation: none; }
+  .nav-item:hover, .kpi:hover, .btn-primary:not(:disabled):hover { transform: none; }
+}
+
 /* ===== TABLET: la barra lateral pasa a barra superior ===== */
 @media (max-width: 1100px) {
   .app-layout { display: block; }
@@ -416,6 +467,12 @@ table.table td .tracking-form input { flex: 1; min-width: 0; max-width: none; ma
 /* ===== PANTALLAS CHICAS: cada fila de tabla pasa a ser una tarjeta ===== */
 @media (max-width: 900px) {
   .main-content { padding: 14px; }
+  .login-screen { grid-template-columns: 1fr; }
+  .login-photo { display: none; }
+  .login-screen { background: linear-gradient(180deg, rgba(20,36,26,.72), rgba(20,36,26,.86)), url('/landing/huerto.webp') center / cover no-repeat; align-items: center; padding: 20px; }
+  .login-card { padding: 28px 22px; border-radius: var(--radius-card); background: var(--panel); box-shadow: 0 18px 40px rgba(0,0,0,.25); }
+  .welcome { padding: 22px; }
+  .welcome-action { width: 100%; }
   .page-header .right { margin-left: 0; }
   .load-bar .right { margin-left: 0; }
   .form-footer .total { width: 100%; margin-right: 0; }

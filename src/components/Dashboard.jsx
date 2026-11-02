@@ -33,7 +33,7 @@ function addDays(date, days) {
   return result.toISOString().slice(0, 10);
 }
 
-export function Dashboard({ shipments, clients, onNew, onViewAll, onOpenShipment, onViewCollections }) {
+export function Dashboard({ user, shipments, clients, onNew, onViewAll, onOpenShipment, onViewCollections }) {
   const clientName = (shipment) => clients.find(c => c.id === shipment.clientId)?.company || 'N/A';
   const totalBoxes = shipments.reduce((sum, s) => sum + (s.boxes || 0), 0);
   const totalUsd = shipments.reduce((sum, s) => sum + (s.totalUsd || 0), 0);
@@ -56,20 +56,29 @@ export function Dashboard({ shipments, clients, onNew, onViewAll, onOpenShipment
 
   return (
     <section>
-      <div className="page-header">
-        <h1>Dashboard</h1>
-        <div className="right">
-          <button className="btn btn-primary" onClick={onNew}>+ Nuevo embarque</button>
+      <div className="welcome">
+        <div>
+          <span className="welcome-date">{new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+          <h1>Hola, {(user.fullName || user.username).split(' ')[0]}</h1>
+          <p>
+            {pendingDelivery.length > 0
+              ? `Tenés ${pendingDelivery.length} ${pendingDelivery.length === 1 ? 'entrega para revisar' : 'entregas para revisar'}`
+              : 'No hay entregas urgentes'}
+            {overdue.length > 0 ? ` y ${overdue.length} ${overdue.length === 1 ? 'cobro vencido' : 'cobros vencidos'}.` : '.'}
+          </p>
         </div>
+        <button className="btn welcome-action" onClick={onNew}>+ Nuevo embarque</button>
       </div>
 
       <div className="kpi-grid">
         <div className="kpi">
+          <span className="kpi-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20" /><path d="M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg></span>
           <div className="kpi-label">Valor comercial total</div>
           <div className="kpi-value">{formatUsd(totalUsd)}</div>
           <div className="kpi-sub">{shipments.length} embarques · {totalTons} TN</div>
         </div>
         <div className="kpi">
+          <span className="kpi-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 6 13.5 15.5 8.5 10.5 1 18" /><path d="M17 6h6v6" /></svg></span>
           <div className="kpi-label">Margen</div>
           <div className="kpi-value">{withCosts.length > 0 ? formatUsd(margin) : '—'}</div>
           <div className="kpi-sub">
@@ -79,6 +88,7 @@ export function Dashboard({ shipments, clients, onNew, onViewAll, onOpenShipment
           </div>
         </div>
         <div className="kpi">
+          <span className="kpi-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 2" /><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z" /></svg></span>
           <div className="kpi-label">Por cobrar</div>
           <div className="kpi-value">{formatUsd(balance)}</div>
           <div className="kpi-sub">
@@ -86,6 +96,7 @@ export function Dashboard({ shipments, clients, onNew, onViewAll, onOpenShipment
           </div>
         </div>
         <div className="kpi">
+          <span className="kpi-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h18" /><path d="M6 7l-3 8a4 4 0 0 0 6 0L6 7" /><path d="M18 7l-3 8a4 4 0 0 0 6 0l-3-8" /><path d="M12 3v18" /><path d="M8 21h8" /></svg></span>
           <div className="kpi-label">Precio promedio / kg</div>
           <div className="kpi-value">{formatUsd(avgPriceKg)}</div>
           <div className="kpi-sub">{totalBoxes.toLocaleString('en-US')} cajas de 10 kg</div>
