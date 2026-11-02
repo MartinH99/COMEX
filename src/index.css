@@ -450,6 +450,13 @@ table.table td .tracking-form input { flex: 1; min-width: 0; max-width: none; ma
 .avatar-photo { display: block; width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
 .sb-avatar, .entity-avatar, .profile-avatar { overflow: hidden; }
 .profile-avatar-wrap { position: relative; flex-shrink: 0; }
+.profile-avatar-open { display: block; padding: 0; border: none; border-radius: 22px; background: transparent; cursor: zoom-in; }
+.profile-avatar-open:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.photo-viewer { background: rgba(20,18,16,.82); cursor: zoom-out; }
+.photo-viewer img { display: block; width: min(100%, 480px); aspect-ratio: 1; border-radius: 16px; object-fit: cover; box-shadow: 0 16px 40px rgba(0,0,0,.4); cursor: default; animation: page-in .2s ease-out; }
+.photo-viewer-close { position: absolute; top: 14px; right: 14px; width: 44px; height: 44px; border: none; border-radius: 50%; background: rgba(255,255,255,.14); color: #fff; font-size: 26px; line-height: 1; cursor: pointer; }
+.photo-viewer-close:hover { background: rgba(255,255,255,.26); }
+.photo-viewer-close:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .profile-avatar-edit { position: absolute; right: -6px; bottom: -6px; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 2px solid #fff; border-radius: 50%; background: var(--primary); color: var(--accent); cursor: pointer; transition: transform .15s; }
 .profile-avatar-edit:hover:not(:disabled) { transform: scale(1.08); }
 .profile-avatar-edit:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
@@ -536,7 +543,7 @@ table.table tbody tr:hover td { background: #F8F9F1; }
 .chart-column:hover .chart-column-bar { filter: brightness(.88); }
 
 @media (prefers-reduced-motion: reduce) {
-  .main-content > section, .main-content > form, .modal { animation: none; }
+  .main-content > section, .main-content > form, .modal, .photo-viewer img { animation: none; }
   .nav-item:hover, .kpi:hover, .btn-primary:not(:disabled):hover { transform: none; }
 }
 

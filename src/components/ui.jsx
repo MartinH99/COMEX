@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export const formatUsd = (value) =>
   `$${(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -118,6 +119,31 @@ export function Modal({ title, onClose, children }) {
         {children}
       </div>
     </div>
+  );
+}
+
+// Foto a pantalla completa: se cierra con la X, tocando afuera o con Escape
+export function PhotoViewer({ src, alt, onClose }) {
+  const closeButton = useRef(null);
+
+  useEffect(() => {
+    const opener = document.activeElement;
+    closeButton.current.focus();
+    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      opener?.focus();
+    };
+  }, [onClose]);
+
+  // Va en el body: la animación de entrada de cada pantalla encerraría al visor dentro de la sección
+  return createPortal(
+    <div className="overlay photo-viewer" role="dialog" aria-modal="true" aria-label={alt} onClick={onClose}>
+      <button ref={closeButton} type="button" className="photo-viewer-close" aria-label="Cerrar" onClick={onClose}>×</button>
+      <img src={src} alt={alt} onClick={e => e.stopPropagation()} />
+    </div>,
+    document.body
   );
 }
 

@@ -3,7 +3,7 @@ import { apiFetch } from '../api';
 import { prepareAvatar } from '../lib/avatarImage';
 import { NOTIFICATION_TYPES } from './NotificationCenter';
 import { ChangePasswordModal } from './Sidebar';
-import { AvatarImage, ICONS, Icon, Stat, formatDateTime, formatUsd, ownAvatarUrl } from './ui';
+import { AvatarImage, ICONS, Icon, PhotoViewer, Stat, formatDateTime, formatUsd, ownAvatarUrl } from './ui';
 
 const formatMonth = (value) => new Date(`${value.replace(' ', 'T')}Z`).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
 
@@ -25,6 +25,7 @@ export function Profile({ user, onUserChange, onOpenShipment }) {
   const [showPassword, setShowPassword] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [avatarError, setAvatarError] = useState(null);
+  const [showPhoto, setShowPhoto] = useState(false);
   const fileInput = useRef(null);
 
   const isAdmin = user.role === 'admin';
@@ -97,7 +98,13 @@ export function Profile({ user, onUserChange, onOpenShipment }) {
     <section className="profile">
       <div className="profile-cover">
         <div className="profile-avatar-wrap">
-          <AvatarImage className="profile-avatar" name={displayName} src={ownAvatarUrl(user)} />
+          {user.hasAvatar ? (
+            <button type="button" className="profile-avatar-open" aria-label="Ver foto de perfil" onClick={() => setShowPhoto(true)}>
+              <AvatarImage className="profile-avatar" name={displayName} src={ownAvatarUrl(user)} />
+            </button>
+          ) : (
+            <AvatarImage className="profile-avatar" name={displayName} src={null} />
+          )}
           <button
             type="button"
             className="profile-avatar-edit"
@@ -256,6 +263,7 @@ export function Profile({ user, onUserChange, onOpenShipment }) {
       </div>
 
       {showPassword && <ChangePasswordModal onClose={() => setShowPassword(false)} />}
+      {showPhoto && user.hasAvatar && <PhotoViewer src={ownAvatarUrl(user)} alt={`Foto de perfil de ${displayName}`} onClose={() => setShowPhoto(false)} />}
     </section>
   );
 }
