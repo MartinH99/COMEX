@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from './api';
 import { CLIENT_NAV, Sidebar } from './components/Sidebar';
+import { Profile } from './components/Profile';
 import { ShipmentList } from './components/ShipmentList';
 import { ProspectList } from './components/ProspectList';
 import Home from './components/Home';
 
 // Vista de solo lectura para clientes; la API solo devuelve datos de su propia empresa
-export default function ClientPortal({ user, onLogout }) {
+export default function ClientPortal({ user, onLogout, onUserChange }) {
   const [tab, setTab] = useState('shipments');
   const [clients, setClients] = useState([]);
   const [shipments, setShipments] = useState([]);
@@ -46,6 +47,19 @@ export default function ClientPortal({ user, onLogout }) {
 
   const renderContent = () => {
     if (tab === 'home') return <Home setTab={setTab} homeTab="shipments" />;
+
+    if (tab === 'profile') {
+      return (
+        <Profile
+          user={user}
+          onUserChange={onUserChange}
+          onOpenShipment={shipmentId => {
+            setFocus(prev => ({ key: prev.key + 1, shipmentId }));
+            setTab('shipments');
+          }}
+        />
+      );
+    }
 
     if (isPending) {
       return (

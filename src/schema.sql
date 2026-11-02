@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS users (
   client_id     INTEGER REFERENCES clients(id) ON DELETE SET NULL,
   failed_logins INTEGER NOT NULL DEFAULT 0,
   locked_until  TEXT,
+  last_login_at TEXT,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -102,6 +103,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   is_read       INTEGER NOT NULL DEFAULT 0,
   dedupe_key    TEXT UNIQUE,
   author        TEXT,
+  author_id     INTEGER,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

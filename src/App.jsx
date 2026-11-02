@@ -60,6 +60,6 @@ export default function App() {
   }
 
   return user.role === 'admin'
-    ? <AdminApp user={user} onLogout={handleLogout} />
-    : <ClientPortal user={user} onLogout={handleLogout} />;
+    ? <AdminApp user={user} onLogout={handleLogout} onUserChange={setUser} />
+    : <ClientPortal user={user} onLogout={handleLogout} onUserChange={setUser} />;
 }

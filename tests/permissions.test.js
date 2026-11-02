@@ -513,6 +513,101 @@ describe('cuentas de equipo', () => {
   });
 });
 
+describe('perfil', () => {
+  let owner;
+  let ownerId;
+  let other;
+
+  before(async () => {
+    const created = await registerClient('perfil-cliente', 'Empresa A');
+    owner = created.session;
+    ownerId = created.id;
+    await admin(`/api/users/${ownerId}`, 'PATCH', { clientId: companyA.id });
+    other = (await admin('/api/users', 'POST', { username: 'admin-perfil', password: 'clave-de-prueba-3', fullName: 'Admin Perfil' })).data;
+  });
+
+  test('sin sesión no se accede', async () => {
+    const anonymous = createSession();
+    assert.equal((await anonymous('/api/auth/profile')).status, 401);
+    assert.equal((await anonymous('/api/auth/profile', 'PATCH', { fullName: 'x' })).status, 401);
+  });
+
+  test('cada usuario edita sus datos', async () => {
+    const response = await owner('/api/auth/profile', 'PATCH', { fullName: ' Nombre Nuevo ', username: 'perfil-nuevo', email: 'nuevo@example.com', country: 'Chile' });
+    assert.equal(response.status, 200);
+    assert.equal(response.data.fullName, 'Nombre Nuevo');
+    assert.equal(response.data.username, 'perfil-nuevo');
+    assert.equal(response.data.country, 'Chile');
+    assert.doesNotMatch(response.text, /scrypt|password/i);
+    assert.equal((await owner('/api/auth/me')).data.email, 'nuevo@example.com');
+    assert.equal((await createSession()('/api/auth/login', 'POST', { username: 'perfil-nuevo', password: 'clave-de-prueba-1' })).status, 200);
+  });
+
+  test('no puede cambiarse rol, estado ni empresa', async () => {
+    const response = await owner('/api/auth/profile', 'PATCH', {
+      fullName: 'Nombre Nuevo', username: 'perfil-nuevo', email: 'nuevo@example.com', country: 'Chile',
+      role: 'admin', status: 'active', clientId: companyB.id, client_id: companyB.id, id: 1
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.data.role, 'client');
+    assert.equal(response.data.clientId, companyA.id);
+    assert.equal(response.data.id, ownerId);
+  });
+
+  test('valida los datos y no pisa a otro usuario', async () => {
+    const base = { fullName: 'X', username: 'perfil-nuevo', email: 'a@example.com', country: 'AR' };
+    assert.equal((await owner('/api/auth/profile', 'PATCH', { ...base, fullName: ' ' })).status, 400);
+    assert.equal((await owner('/api/auth/profile', 'PATCH', { ...base, username: 'con espacios' })).status, 400);
+    assert.equal((await owner('/api/auth/profile', 'PATCH', { ...base, email: 'sin-arroba' })).status, 400);
+    assert.equal((await owner('/api/auth/profile', 'PATCH', { ...base, email: '' })).status, 400);
+    assert.equal((await owner('/api/auth/profile', 'PATCH', { ...base, country: '' })).status, 400);
+    assert.equal((await owner('/api/auth/profile', 'PATCH', { ...base, username: other.username })).status, 409);
+  });
+
+  test('el cliente ve solo movimientos permitidos de sus embarques', async () => {
+    const summary = (await owner('/api/auth/profile')).data;
+    assert.ok(summary.movements.length > 0);
+    assert.ok(summary.movements.every(m => ['created', 'status', 'delivery', 'logistics'].includes(m.type)));
+    const mine = (await owner('/api/shipments')).data.map(s => s.id);
+    assert.ok(summary.movements.every(m => mine.includes(m.shipmentId)));
+    assert.ok(!summary.movements.some(m => m.shipmentId === shipmentB.id));
+    assert.equal(summary.stats.shipments, mine.length);
+    assert.doesNotMatch(JSON.stringify(summary), /SEGUIMIENTO-INTERNO|Cobro|costsUsd|author/);
+  });
+
+  test('una cuenta pendiente no recibe movimientos', async () => {
+    const summary = (await pending('/api/auth/profile')).data;
+    assert.deepEqual(summary.movements, []);
+    assert.equal(summary.stats.shipments, 0);
+    assert.equal(summary.stats.totalUsd, 0);
+  });
+
+  test('el admin ve sus movimientos, y cambiarse el nombre no los pierde', async () => {
+    const session = createSession();
+    await session('/api/auth/login', 'POST', { username: 'admin-perfil', password: 'clave-de-prueba-3' });
+    const shipment = (await session('/api/shipments', 'POST', newShipment(companyB.id))).data;
+    await session(`/api/shipments/${shipment.id}/payments`, 'POST', { amountUsd: 10, paidAt: '2030-01-01' });
+    await admin(`/api/shipments/${shipment.id}/followups`, 'POST', { note: 'de otra persona' });
+
+    const before = (await session('/api/auth/profile')).data;
+    assert.equal(before.stats.shipmentsCreated, 1);
+    assert.equal(before.stats.paymentsRegistered, 1);
+    assert.equal(before.stats.movements, 2);
+    assert.equal(before.stats.recent, 2);
+    assert.ok(!JSON.stringify(before.movements).includes('de otra persona'));
+
+    assert.equal((await session('/api/auth/profile', 'PATCH', { fullName: 'Otro Nombre', username: 'admin-perfil', email: '' })).status, 200);
+    assert.equal((await session('/api/auth/profile')).data.stats.movements, 2);
+  });
+
+  test('registra el último ingreso', async () => {
+    const session = createSession();
+    const login = await session('/api/auth/login', 'POST', { username: 'admin-perfil', password: 'clave-de-prueba-3' });
+    assert.equal(login.status, 200);
+    assert.ok(login.data.lastLoginAt);
+  });
+});
+
 describe('códigos de embarque', () => {
   test('25 embarques simultáneos reciben códigos distintos', async () => {
     const responses = await Promise.all(

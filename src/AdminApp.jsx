@@ -3,6 +3,7 @@ import { apiFetch } from './api';
 import { ADMIN_NAV, Sidebar } from './components/Sidebar';
 import { UserList } from './components/UserList';
 import { Collections } from './components/Collections';
+import { Profile } from './components/Profile';
 import { NotificationCenter } from './components/NotificationCenter';
 import { Dashboard } from './components/Dashboard';
 import { ShipmentForm } from './components/ShipmentForm';
@@ -16,7 +17,7 @@ import Home from './components/Home';
 
 const NOTIFICATIONS_POLL_MS = 60000;
 
-export default function AdminApp({ user, onLogout }) {
+export default function AdminApp({ user, onLogout, onUserChange }) {
   const [tab, setTab] = useState('dashboard');
   const [clients, setClients] = useState([]);
   const [shipments, setShipments] = useState([]);
@@ -487,6 +488,16 @@ export default function AdminApp({ user, onLogout }) {
             onCreate={handleCreateClient}
             onUpdate={handleEditClient}
             onDelete={handleDeleteClient}
+          />
+        )}
+        {tab === 'profile' && (
+          <Profile
+            user={user}
+            onUserChange={updated => {
+              onUserChange(updated);
+              setUsers(prev => prev.map(u => (u.id === updated.id ? updated : u)));
+            }}
+            onOpenShipment={openShipment}
           />
         )}
         {tab === 'collections' && (

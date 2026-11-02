@@ -100,6 +100,7 @@ const SCHEMA = [
     is_read       INTEGER NOT NULL DEFAULT 0,
     dedupe_key    TEXT UNIQUE,
     author        TEXT,
+    author_id     INTEGER,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE TABLE IF NOT EXISTS notification_reads (
@@ -162,6 +163,7 @@ const SCHEMA = [
     client_id     INTEGER REFERENCES clients(id) ON DELETE SET NULL,
     failed_logins INTEGER NOT NULL DEFAULT 0,
     locked_until  TEXT,
+    last_login_at TEXT,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE TABLE IF NOT EXISTS sessions (
@@ -190,13 +192,14 @@ const SHIPMENT_COLUMNS = [
   ['actual_arrival', 'actual_arrival TEXT']
 ];
 
-const NOTIFICATION_COLUMNS = [['author', 'author TEXT']];
+const NOTIFICATION_COLUMNS = [['author', 'author TEXT'], ['author_id', 'author_id INTEGER']];
+const USER_COLUMNS = [['last_login_at', 'last_login_at TEXT']];
 
 // Crea lo que falte sin tocar los datos existentes
 export async function applySchema(client = db) {
   await client.batch(SCHEMA, 'write');
 
-  for (const [table, columns] of [['shipments', SHIPMENT_COLUMNS], ['notifications', NOTIFICATION_COLUMNS]]) {
+  for (const [table, columns] of [['shipments', SHIPMENT_COLUMNS], ['notifications', NOTIFICATION_COLUMNS], ['users', USER_COLUMNS]]) {
     const { rows } = await client.execute(`PRAGMA table_info(${table})`);
     const existing = rows.map(row => row.name);
 

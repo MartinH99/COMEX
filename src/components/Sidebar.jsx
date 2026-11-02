@@ -35,7 +35,7 @@ function NavItem({ item, active, badge, onClick }) {
   );
 }
 
-function ChangePasswordModal({ onClose }) {
+export function ChangePasswordModal({ onClose }) {
   const [form, setForm] = useState({ currentPassword: '', newPassword: '' });
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState(false);
@@ -94,8 +94,6 @@ function ChangePasswordModal({ onClose }) {
 }
 
 export function Sidebar({ items, currentTab, setTab, user, onLogout, badges = {}, unread, onOpenNotifications }) {
-  const [showPassword, setShowPassword] = useState(false);
-
   // Los formularios de alta son parte de su sección
   const parentTab = { 'new-shipment': 'shipments', 'prospect-form': 'prospects' };
   const activeTab = parentTab[currentTab] || currentTab;
@@ -136,15 +134,19 @@ export function Sidebar({ items, currentTab, setTab, user, onLogout, badges = {}
       </nav>
 
       <div className="sb-user">
-        <div className="sb-avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</div>
-        <div className="sb-user-text">
-          <div className="sb-user-name">{displayName}</div>
-          <button className="sb-link" onClick={() => setShowPassword(true)}>Cambiar contraseña</button>
-        </div>
+        <button
+          className={`sb-profile${currentTab === 'profile' ? ' active' : ''}`}
+          aria-current={currentTab === 'profile' ? 'page' : undefined}
+          onClick={() => setTab('profile')}
+        >
+          <span className="sb-avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</span>
+          <span className="sb-user-text">
+            <span className="sb-user-name">{displayName}</span>
+            <span className="sb-user-link">Mi perfil</span>
+          </span>
+        </button>
         <button className="sb-link sb-logout" onClick={onLogout}>Salir</button>
       </div>
-
-      {showPassword && <ChangePasswordModal onClose={() => setShowPassword(false)} />}
     </aside>
   );
 }

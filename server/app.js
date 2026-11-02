@@ -13,6 +13,7 @@ const app = express();
 // Quién hace cada pedido, para registrarlo en el historial sin pasarlo de función en función
 const requestContext = new AsyncLocalStorage();
 const currentAuthor = () => requestContext.getStore()?.author ?? null;
+const currentAuthorId = () => requestContext.getStore()?.authorId ?? null;
 
 app.use(express.json());
 
@@ -29,7 +30,8 @@ app.use(async (req, res, next) => {
 const SELECT_USER = `
   SELECT
     u.id, u.username, u.role, u.status, u.full_name AS fullName, u.company, u.country, u.email,
-    u.client_id AS clientId, c.company AS clientCompany, u.created_at AS createdAt
+    u.client_id AS clientId, c.company AS clientCompany, u.created_at AS createdAt,
+    u.last_login_at AS lastLoginAt
   FROM users u
   LEFT JOIN clients c ON c.id = u.client_id
 `;
@@ -152,7 +154,10 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(403).json({ error: 'Tu cuenta está deshabilitada.' });
     }
 
-    await db.execute({ sql: 'UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = ?', args: [user.id] });
+    await db.execute({
+      sql: 'UPDATE users SET failed_logins = 0, locked_until = NULL, last_login_at = CURRENT_TIMESTAMP WHERE id = ?',
+      args: [user.id]
+    });
     await startSession(res, user.id);
     const selected = await db.execute({ sql: `${SELECT_USER} WHERE u.id = ?`, args: [user.id] });
     res.json({ ...selected.rows[0] });
@@ -164,7 +169,7 @@ app.post('/api/auth/login', async (req, res) => {
 // A partir de acá todo requiere sesión
 app.use('/api', (req, res, next) => {
   if (!req.user) return res.status(401).json({ error: 'Iniciá sesión para continuar.' });
-  requestContext.run({ author: req.user.fullName || req.user.username }, next);
+  requestContext.run({ author: req.user.fullName || req.user.username, authorId: req.user.id }, next);
 });
 
 // POST /api/auth/logout
@@ -201,6 +206,135 @@ app.post('/api/auth/password', async (req, res) => {
     res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ error: 'Error al cambiar la contraseña: ' + error.message });
+  }
+});
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MOVEMENTS_LIMIT = 30;
+const CLIENT_VISIBLE_TYPES = "('created', 'status', 'delivery', 'logistics')";
+
+// Movimientos de quien pregunta: los que hizo un admin, o los de los embarques de un cliente.
+// Los registros anteriores a author_id se reconocen por el nombre.
+const ownMovementsFilter = (user) => ({
+  where: '(author_id = ? OR (author_id IS NULL AND author = ?))',
+  args: [user.id, user.fullName || user.username]
+});
+
+const MOVEMENT_COLUMNS = 'id, shipment_id AS shipmentId, shipment_code AS shipmentCode, type, message, created_at AS createdAt';
+
+async function loadAdminSummary(user) {
+  const { where, args } = ownMovementsFilter(user);
+  const [movements, stats] = await db.batch([
+    { sql: `SELECT ${MOVEMENT_COLUMNS} FROM notifications WHERE ${where} ORDER BY id DESC LIMIT ${MOVEMENTS_LIMIT}`, args },
+    {
+      sql: `
+        SELECT
+          COUNT(*) AS movements,
+          COALESCE(SUM(created_at >= datetime('now', '-30 days')), 0) AS recent,
+          COALESCE(SUM(type = 'created'), 0) AS shipmentsCreated,
+          COALESCE(SUM(type = 'payment' AND message NOT LIKE 'Se anuló%'), 0) AS paymentsRegistered
+        FROM notifications WHERE ${where}
+      `,
+      args
+    }
+  ], 'read');
+  const row = stats.rows[0];
+  return {
+    movements: movements.rows.map(plain),
+    stats: {
+      movements: Number(row.movements),
+      recent: Number(row.recent),
+      shipmentsCreated: Number(row.shipmentsCreated),
+      paymentsRegistered: Number(row.paymentsRegistered)
+    }
+  };
+}
+
+async function loadClientSummary(user) {
+  const [movements, shipments, prospects] = await db.batch([
+    {
+      sql: `
+        SELECT ${MOVEMENT_COLUMNS} FROM notifications
+        WHERE type IN ${CLIENT_VISIBLE_TYPES} AND shipment_id IN (SELECT id FROM shipments WHERE client_id = ?)
+        ORDER BY id DESC LIMIT ${MOVEMENTS_LIMIT}
+      `,
+      args: [user.clientId]
+    },
+    {
+      sql: `
+        SELECT
+          COUNT(*) AS shipments,
+          COALESCE(SUM(status = 'En Tránsito'), 0) AS inTransit,
+          COALESCE(SUM(status = 'Entregado'), 0) AS delivered,
+          COALESCE(SUM(total_usd), 0) AS totalUsd
+        FROM shipments WHERE client_id = ?
+      `,
+      args: [user.clientId]
+    },
+    { sql: "SELECT COUNT(*) AS count FROM prospectos WHERE client_id = ? AND status NOT IN ('Nuevo', 'Perdido')", args: [user.clientId] }
+  ], 'read');
+  const row = shipments.rows[0];
+  return {
+    movements: movements.rows.map(plain),
+    stats: {
+      shipments: Number(row.shipments),
+      inTransit: Number(row.inTransit),
+      delivered: Number(row.delivered),
+      totalUsd: Number(row.totalUsd),
+      prospects: Number(prospects.rows[0].count)
+    }
+  };
+}
+
+// GET /api/auth/profile: resumen de actividad del usuario
+app.get('/api/auth/profile', async (req, res) => {
+  try {
+    res.json(await (req.user.role === 'client' ? loadClientSummary(req.user) : loadAdminSummary(req.user)));
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener tu actividad: ' + error.message });
+  }
+});
+
+// PATCH /api/auth/profile: cada usuario edita solo sus datos; rol, estado y empresa no se tocan acá
+app.patch('/api/auth/profile', async (req, res) => {
+  try {
+    const clean = (value) => (typeof value === 'string' ? value.trim() : '');
+    const fullName = clean(req.body.fullName);
+    const username = clean(req.body.username);
+    const email = clean(req.body.email);
+    const isClientUser = req.user.role === 'client';
+    const country = isClientUser ? clean(req.body.country) : req.user.country;
+
+    if (!fullName || fullName.length > 120) return res.status(400).json({ error: 'Indicá tu nombre.' });
+    if (!USERNAME_PATTERN.test(username)) {
+      return res.status(400).json({ error: 'El usuario debe tener entre 3 y 60 caracteres, sin espacios.' });
+    }
+    if (email.length > 160 || (email && !EMAIL_PATTERN.test(email)) || (isClientUser && !email)) {
+      return res.status(400).json({ error: 'Revisá el email.' });
+    }
+    if (isClientUser && (!country || country.length > 80)) return res.status(400).json({ error: 'Indicá tu país.' });
+
+    try {
+      await db.batch([
+        // Antes de cambiar el nombre, asocia al usuario sus movimientos anteriores
+        {
+          sql: 'UPDATE notifications SET author_id = ? WHERE author_id IS NULL AND author = ?',
+          args: [req.user.id, req.user.fullName || req.user.username]
+        },
+        {
+          sql: 'UPDATE users SET full_name = ?, username = ?, email = ?, country = ? WHERE id = ?',
+          args: [fullName, username, email, country, req.user.id]
+        }
+      ], 'write');
+    } catch (error) {
+      if (error.message.includes('UNIQUE')) return res.status(409).json({ error: 'Ese usuario ya existe.' });
+      throw error;
+    }
+
+    const { rows } = await db.execute({ sql: `${SELECT_USER} WHERE u.id = ?`, args: [req.user.id] });
+    res.json({ ...rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al guardar tus datos: ' + error.message });
   }
 });
 
@@ -360,10 +494,10 @@ const READ_EXPRESSION = `
 // Registra un evento de un embarque existente; el mensaje es SQL para poder usar sus columnas
 const notifyFromShipment = (id, type, messageSql, messageArgs = [], extraWhere = '', extraArgs = []) => ({
   sql: `
-    INSERT INTO notifications (shipment_id, shipment_code, type, author, message)
-    SELECT id, code, ?, ?, ${messageSql} FROM shipments WHERE id = ? ${extraWhere}
+    INSERT INTO notifications (shipment_id, shipment_code, type, author, author_id, message)
+    SELECT id, code, ?, ?, ?, ${messageSql} FROM shipments WHERE id = ? ${extraWhere}
   `,
-  args: [type, currentAuthor(), ...messageArgs, id, ...extraArgs]
+  args: [type, currentAuthor(), currentAuthorId(), ...messageArgs, id, ...extraArgs]
 });
 
 // Fecha de hoy (AAAA-MM-DD) en Argentina, sumando días si hace falta
@@ -638,11 +772,11 @@ app.post('/api/shipments', async (req, res) => {
 
     statements.push({
       sql: `
-        INSERT INTO notifications (shipment_id, shipment_code, type, author, message)
-        SELECT id, code, 'created', ?, 'Embarque registrado para ' || (SELECT company FROM clients WHERE id = client_id)
+        INSERT INTO notifications (shipment_id, shipment_code, type, author, author_id, message)
+        SELECT id, code, 'created', ?, ?, 'Embarque registrado para ' || (SELECT company FROM clients WHERE id = client_id)
         FROM shipments WHERE code = ?
       `,
-      args: [currentAuthor(), generatedCode]
+      args: [currentAuthor(), currentAuthorId(), generatedCode]
     });
     statements.push({ sql: `${SELECT_SHIPMENT} WHERE s.code = ?`, args: [generatedCode] });
 
@@ -955,12 +1089,12 @@ app.delete('/api/shipments/:id/payments/:paymentId', async (req, res) => {
     const [, result] = await db.batch([
       {
         sql: `
-          INSERT INTO notifications (shipment_id, shipment_code, type, author, message)
-          SELECT s.id, s.code, 'payment', ?, 'Se anuló un cobro de USD ' || printf('%.2f', p.amount_usd)
+          INSERT INTO notifications (shipment_id, shipment_code, type, author, author_id, message)
+          SELECT s.id, s.code, 'payment', ?, ?, 'Se anuló un cobro de USD ' || printf('%.2f', p.amount_usd)
           FROM shipment_payments p JOIN shipments s ON s.id = p.shipment_id
           WHERE p.id = ? AND p.shipment_id = ?
         `,
-        args: [currentAuthor(), paymentId, id]
+        args: [currentAuthor(), currentAuthorId(), paymentId, id]
       },
       { sql: 'DELETE FROM shipment_payments WHERE id = ? AND shipment_id = ?', args: [paymentId, id] }
     ], 'write');

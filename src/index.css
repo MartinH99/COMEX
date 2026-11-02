@@ -407,6 +407,46 @@ table.table td .tracking-form input { flex: 1; min-width: 0; max-width: none; ma
 .timeline li { padding-left: 10px; border-left: 2px solid var(--border-input); font-size: 12.5px; line-height: 1.4; overflow-wrap: anywhere; }
 .timeline .when { display: block; font-size: 11px; color: var(--text-soft); }
 
+/* ===== PERFIL ===== */
+.sb-profile { display: flex; flex: 1; align-items: center; gap: 9px; min-width: 0; padding: 4px; border: none; border-radius: var(--radius); background: transparent; color: inherit; text-align: left; cursor: pointer; transition: background .15s; }
+.sb-profile:hover, .sb-profile.active { background: rgba(183,216,75,.14); }
+.sb-profile:focus-visible { outline: 2px solid var(--accent); }
+.sb-user-link { display: block; font-size: 11px; font-weight: 500; color: var(--sb-faint); }
+.sb-user { padding-left: 0; padding-right: 0; }
+
+.profile-cover { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 18px; min-height: 176px; margin-bottom: 16px; padding: 26px 28px; border-radius: 18px; background: linear-gradient(0deg, rgba(20,36,26,.92), rgba(20,36,26,.42)), url('/landing/huerto.webp') center 30% / cover no-repeat; color: #fff; box-shadow: 0 10px 28px rgba(30,51,37,.18); }
+.profile-avatar { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 84px; height: 84px; border: 3px solid rgba(255,255,255,.9); border-radius: 22px; background: var(--accent); color: var(--on-accent); font-family: var(--font-title); font-size: 30px; font-weight: 700; box-shadow: 0 8px 20px rgba(0,0,0,.28); }
+.profile-identity { flex: 1; min-width: 200px; }
+.profile-identity h1 { font-size: 27px; overflow-wrap: anywhere; }
+.profile-identity p { margin: 1px 0 8px; font-size: 13.5px; color: rgba(255,255,255,.82); overflow-wrap: anywhere; }
+.profile-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.profile-tag { padding: 3px 10px; border: 1px solid rgba(255,255,255,.34); border-radius: 999px; background: rgba(255,255,255,.14); font-size: 11.5px; font-weight: 600; backdrop-filter: blur(6px); }
+.profile-tag-pending { border-color: transparent; background: var(--pend-bg); color: var(--pend-tx); }
+.profile-columns { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; align-items: start; }
+.profile-data { display: flex; flex-direction: column; margin: 0; }
+.profile-data > div { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--border-row); }
+.profile-data > div:last-child { border-bottom: none; }
+.profile-data dt { flex-shrink: 0; font-size: 12.5px; color: var(--text-soft); }
+.profile-data dd { margin: 0; font-size: 13px; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.profile-capitalize::first-letter { text-transform: uppercase; }
+.profile-saved { margin-bottom: 8px; padding: 8px 12px; border-radius: var(--radius); background: var(--ok-bg); color: var(--ok-tx); font-size: 12.5px; font-weight: 600; }
+.profile-form { display: flex; flex-direction: column; gap: 12px; }
+.profile-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.profile-security { display: flex; align-items: center; gap: 12px; }
+.profile-security > div { flex: 1; min-width: 0; font-size: 13px; }
+.profile-security p { margin: 1px 0 0; font-size: 12px; color: var(--text-soft); }
+.profile-security-icon { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 10px; background: var(--tint); color: var(--tint-tx); }
+.profile-timeline { max-height: 620px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.profile-timeline li + li { border-top: 1px solid var(--border-row); }
+.profile-timeline button, .profile-timeline li > div { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 12px 16px; border: none; background: transparent; color: var(--text); font: inherit; text-align: left; }
+.profile-timeline button { cursor: pointer; transition: background .12s; }
+.profile-timeline button:hover { background: var(--panel-soft); }
+.profile-timeline button:focus-visible { outline: 2px solid var(--highlight); outline-offset: -2px; }
+.profile-timeline-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.profile-timeline-time { font-size: 11px; color: var(--text-soft); white-space: nowrap; }
+.profile-timeline-message { font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.profile-timeline-code { font-size: 11px; color: var(--text-soft); }
+
 /* ===== PANTALLAS DE GESTIÓN ===== */
 .page-title { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
 .page-title-icon { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 12px; background: var(--primary); color: var(--accent); box-shadow: 0 4px 12px rgba(30,51,37,.2); }
@@ -502,6 +542,8 @@ table.table tbody tr:hover td { background: #F8F9F1; }
 @media (max-width: 900px) {
   .main-content { padding: 14px; }
   .login-screen { grid-template-columns: 1fr; }
+  .profile-columns { grid-template-columns: 1fr; }
+  .profile-cover { padding: 20px; }
   .login-photo { display: none; }
   .login-screen { background: linear-gradient(180deg, rgba(20,36,26,.72), rgba(20,36,26,.86)), url('/landing/huerto.webp') center / cover no-repeat; align-items: center; padding: 20px; }
   .login-card { padding: 28px 22px; border-radius: var(--radius-card); background: var(--panel); box-shadow: 0 18px 40px rgba(0,0,0,.25); }
