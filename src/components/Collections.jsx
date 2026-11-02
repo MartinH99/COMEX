@@ -1,9 +1,39 @@
 import { useState } from 'react';
-import { PAYMENT_BADGE, getFinance } from '../lib/finance';
-import { formatDate, formatUsd } from './ui';
+import { PAYMENT_BADGE, getFinance, today } from '../lib/finance';
+import { Modal, formatDate, formatUsd } from './ui';
 
-export function Collections({ shipments, clients, onOpenShipment }) {
-  const [onlyOverdue, setOnlyOverdue] = useState(false);
+function PayFullModal({ shipment, balance, onConfirm, onClose }) {
+  const [paidAt, setPaidAt] = useState(today());
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    const saved = await onConfirm(shipment, balance, paidAt);
+    setSaving(false);
+    if (saved) onClose();
+  };
+
+  return (
+    <Modal title="Marcar como pagado" onClose={onClose}>
+      <form onSubmit={handleSubmit}>
+        <p>Se registra un cobro de <strong>{formatUsd(balance)}</strong> en {shipment.code} y su saldo queda en cero.</p>
+        <div className="modal-field">
+          <label htmlFor="payFullDate">Fecha del cobro</label>
+          <input id="payFullDate" type="date" autoFocus value={paidAt} onChange={e => setPaidAt(e.target.value)} required />
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-subtle" onClick={onClose}>Cancelar</button>
+          <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Guardando…' : 'Marcar como pagado'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+export function Collections({ shipments, clients, onOpenShipment, onPayFull }) {
+  const [view, setView] = useState('pending');
+  const [payingId, setPayingId] = useState(null);
 
   const rows = shipments.map(shipment => ({
     shipment,
@@ -12,7 +42,10 @@ export function Collections({ shipments, clients, onOpenShipment }) {
   }));
   const pending = rows.filter(row => row.finance.balance > 0);
   const overdue = pending.filter(row => row.finance.isOverdue);
-  const visible = (onlyOverdue ? overdue : pending)
+  const paidRows = rows.filter(row => row.finance.total > 0 && row.finance.balance <= 0);
+  const views = { pending, overdue, paid: paidRows };
+  const paying = rows.find(row => row.shipment.id === payingId);
+  const visible = [...views[view]]
     .sort((a, b) => (a.shipment.paymentDueDate || '9999').localeCompare(b.shipment.paymentDueDate || '9999'));
 
   const sum = (list, get) => list.reduce((total, row) => total + get(row), 0);
@@ -36,8 +69,9 @@ export function Collections({ shipments, clients, onOpenShipment }) {
       <div className="page-header">
         <h1>Cobros</h1>
         <div className="pills">
-          <button className={!onlyOverdue ? 'active' : ''} onClick={() => setOnlyOverdue(false)}>Pendientes</button>
-          <button className={onlyOverdue ? 'active' : ''} onClick={() => setOnlyOverdue(true)}>Vencidos ({overdue.length})</button>
+          <button className={view === 'pending' ? 'active' : ''} onClick={() => setView('pending')}>Pendientes ({pending.length})</button>
+          <button className={view === 'overdue' ? 'active' : ''} onClick={() => setView('overdue')}>Vencidos ({overdue.length})</button>
+          <button className={view === 'paid' ? 'active' : ''} onClick={() => setView('paid')}>Pagados ({paidRows.length})</button>
         </div>
       </div>
 
@@ -60,9 +94,9 @@ export function Collections({ shipments, clients, onOpenShipment }) {
       </div>
 
       <div className="section">
-        <div className="section-header"><h2>Embarques con saldo</h2></div>
+        <div className="section-header"><h2>{view === 'paid' ? 'Embarques pagados' : 'Embarques con saldo'}</h2></div>
         {visible.length === 0 ? (
-          <div className="empty">{onlyOverdue ? 'No hay cobros vencidos.' : 'No hay saldos pendientes.'}</div>
+          <div className="empty">{{ pending: 'No hay saldos pendientes.', overdue: 'No hay cobros vencidos.', paid: 'Todavía no hay embarques pagados.' }[view]}</div>
         ) : (
           <div className="scroll-x">
             <table className="table">
@@ -90,6 +124,9 @@ export function Collections({ shipments, clients, onOpenShipment }) {
                     <td data-label="Saldo" className="num strong">{formatUsd(finance.balance)}</td>
                     <td>
                       <div className="row-actions">
+                        {finance.balance > 0 && (
+                          <button className="btn btn-small btn-primary" onClick={() => setPayingId(shipment.id)}>Marcar como pagado</button>
+                        )}
                         <button className="btn btn-small" onClick={() => onOpenShipment(shipment.id)}>Ver embarque</button>
                       </div>
                     </td>
@@ -127,6 +164,15 @@ export function Collections({ shipments, clients, onOpenShipment }) {
             </table>
           </div>
         </div>
+      )}
+
+      {paying && paying.finance.balance > 0 && (
+        <PayFullModal
+          shipment={paying.shipment}
+          balance={paying.finance.balance}
+          onConfirm={onPayFull}
+          onClose={() => setPayingId(null)}
+        />
       )}
     </section>
   );

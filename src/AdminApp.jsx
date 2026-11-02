@@ -261,6 +261,18 @@ export default function AdminApp({ user, onLogout }) {
     }
   };
 
+  const handlePayFull = async (shipment, amountUsd, paidAt) => {
+    const detail = await sendJson(`/api/shipments/${shipment.id}/payments`, 'POST', { amountUsd, paidAt });
+    if (detail) {
+      setShipments(prev => prev.map(s => (
+        s.id === shipment.id ? { ...s, costsUsd: detail.costsUsd, paidUsd: detail.paidUsd } : s
+      )));
+      showToast(`Embarque ${shipment.code} marcado como pagado`, 'ok');
+      refreshNotifications();
+    }
+    return detail;
+  };
+
   const handleCreateClient = async (clientData) => {
     const created = await sendJson('/api/clients', 'POST', clientData);
     if (created) {
@@ -445,7 +457,10 @@ export default function AdminApp({ user, onLogout }) {
               setTab('new-shipment');
             }}
             onRegisterDelivery={handleRegisterDelivery}
-            onFinanceChanged={(id, totals) => setShipments(prev => prev.map(s => (s.id === id ? { ...s, ...totals } : s)))}
+            onFinanceChanged={(id, totals) => {
+              setShipments(prev => prev.map(s => (s.id === id ? { ...s, ...totals } : s)));
+              refreshNotifications();
+            }}
             onChangeStatus={handleChangeStatus}
             onAddFollowUp={handleAddFollowUp}
           />
@@ -459,7 +474,7 @@ export default function AdminApp({ user, onLogout }) {
           />
         )}
         {tab === 'collections' && (
-          <Collections shipments={shipments} clients={clients} onOpenShipment={openShipment} />
+          <Collections shipments={shipments} clients={clients} onOpenShipment={openShipment} onPayFull={handlePayFull} />
         )}
         {tab === 'calibers' && <CaliberList />}
         {tab === 'users' && (

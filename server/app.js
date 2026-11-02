@@ -725,7 +725,12 @@ app.post('/api/shipments/:id/payments', async (req, res) => {
 
     await db.batch([
       { sql: 'INSERT INTO shipment_payments (shipment_id, amount_usd, paid_at, note) VALUES (?, ?, ?, ?)', args: [id, amountUsd, paidAt, note || null] },
-      notifyFromShipment(id, 'payment', "'Cobro registrado: USD ' || printf('%.2f', ?)", [amountUsd])
+      notifyFromShipment(
+        id,
+        'payment',
+        `${amountUsd === balance ? "'Pago completo: USD '" : "'Cobro registrado: USD '"} || printf('%.2f', ?)`,
+        [amountUsd]
+      )
     ], 'write');
     res.status(201).json(await loadShipmentFinance(id));
   } catch (error) {

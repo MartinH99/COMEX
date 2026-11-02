@@ -14,7 +14,7 @@ export function getFinance(shipment, referenceDate = today()) {
   const isOverdue = balance > 0 && Boolean(shipment.paymentDueDate) && shipment.paymentDueDate < referenceDate;
 
   let paymentStatus = 'Pendiente';
-  if (balance <= 0) paymentStatus = 'Cobrado';
+  if (balance <= 0) paymentStatus = 'Pagado';
   else if (isOverdue) paymentStatus = 'Vencido';
   else if (paid > 0) paymentStatus = 'Parcial';
 
@@ -34,7 +34,7 @@ export const PAYMENT_BADGE = {
   'Pendiente': 'pend',
   'Parcial': 'brand',
   'Vencido': 'alert',
-  'Cobrado': 'ok'
+  'Pagado': 'ok'
 };
 
 // Suma un valor por grupo y devuelve los grupos de mayor a menor

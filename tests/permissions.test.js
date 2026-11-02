@@ -18,6 +18,7 @@ process.env.ADMIN_PASSWORD = ADMIN_PASSWORD;
 
 const { default: app } = await import('../server/app.js');
 const { default: db } = await import('../server/db.js');
+const { getFinance } = await import('../src/lib/finance.js');
 
 let server;
 let baseUrl;
@@ -282,6 +283,31 @@ describe('costos y cobros', () => {
     assert.equal((await admin(`/api/shipments/${shipment.id}/payments`, 'POST', { amountUsd: 600, paidAt: '2030-01-01' })).status, 201);
     assert.equal((await admin(`/api/shipments/${shipment.id}/payments`, 'POST', { amountUsd: 400.01, paidAt: '2030-01-02' })).status, 400);
     assert.equal((await admin(`/api/shipments/${shipment.id}/payments`, 'POST', { amountUsd: 400, paidAt: '2030-01-02' })).data.paidUsd, 1000);
+  });
+
+  test('cobrar todo el saldo deja el embarque pagado', async () => {
+    const shipment = (await admin('/api/shipments', 'POST', newShipment(companyA.id))).data;
+    await admin(`/api/shipments/${shipment.id}/payments`, 'POST', { amountUsd: 250.5, paidAt: '2030-01-01' });
+    const detail = (await admin(`/api/shipments/${shipment.id}/payments`, 'POST', { amountUsd: 749.5, paidAt: '2030-01-02' })).data;
+    assert.equal(detail.paidUsd, 1000);
+
+    const saved = (await admin('/api/shipments')).data.find(s => s.id === shipment.id);
+    const finance = getFinance({ ...saved, paymentDueDate: '2020-01-01' });
+    assert.equal(finance.balance, 0);
+    assert.equal(finance.paymentStatus, 'Pagado');
+    assert.equal(finance.isOverdue, false);
+
+    const history = (await admin(`/api/shipments/${shipment.id}/notifications`)).data;
+    assert.match(history[0].message, /^Pago completo: USD 749\.50$/);
+    assert.equal((await admin(`/api/shipments/${shipment.id}/payments`, 'POST', { amountUsd: 0.01, paidAt: '2030-01-03' })).status, 400);
+  });
+
+  test('anular un cobro vuelve a dejar saldo', async () => {
+    const shipment = (await admin('/api/shipments', 'POST', newShipment(companyA.id))).data;
+    const paid = (await admin(`/api/shipments/${shipment.id}/payments`, 'POST', { amountUsd: 1000, paidAt: '2030-01-01' })).data;
+    assert.equal(getFinance({ ...shipment, paidUsd: paid.paidUsd }).paymentStatus, 'Pagado');
+    const after = (await admin(`/api/shipments/${shipment.id}/payments/${paid.payments[0].id}`, 'DELETE')).data;
+    assert.equal(getFinance({ ...shipment, paidUsd: after.paidUsd }).paymentStatus, 'Pendiente');
   });
 
   test('rechaza importes y fechas inválidos', async () => {

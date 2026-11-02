@@ -34,6 +34,8 @@ export function ShipmentFinance({ shipment, onChanged }) {
     return () => { ignore = true; };
   }, [shipment.id]);
 
+  const finance = getFinance(detail ? { ...shipment, costsUsd: detail.costsUsd, paidUsd: detail.paidUsd } : shipment);
+
   // Todas las operaciones devuelven el detalle actualizado
   const send = async (path, method, body) => {
     setSaving(true);
@@ -63,13 +65,18 @@ export function ShipmentFinance({ shipment, onChanged }) {
     if (saved) setCost({ ...cost, description: '', amountUsd: '' });
   };
 
+  const handlePayFullBalance = () => send('payments', 'POST', {
+    amountUsd: finance.balance,
+    paidAt: payment.paidAt,
+    note: payment.note
+  });
+
   const handleAddPayment = async (e) => {
     e.preventDefault();
     const saved = await send('payments', 'POST', { ...payment, amountUsd: Number(payment.amountUsd) });
     if (saved) setPayment({ ...payment, amountUsd: '', note: '' });
   };
 
-  const finance = getFinance(detail ? { ...shipment, costsUsd: detail.costsUsd, paidUsd: detail.paidUsd } : shipment);
   const categoryListId = `cost-categories-${shipment.id}`;
 
   return (
@@ -141,7 +148,14 @@ export function ShipmentFinance({ shipment, onChanged }) {
               <label htmlFor={`pay-note-${shipment.id}`}>Nota (opcional)</label>
               <input id={`pay-note-${shipment.id}`} type="text" maxLength={300} value={payment.note} onChange={e => setPayment({ ...payment, note: e.target.value })} />
             </div>
-            <button type="submit" className="btn btn-small" disabled={saving || finance.balance <= 0}>Registrar cobro</button>
+            <div className="finance-form-actions">
+              <button type="submit" className="btn btn-small" disabled={saving || finance.balance <= 0}>Registrar cobro</button>
+              {finance.balance > 0 && (
+                <button type="button" className="btn btn-small btn-primary" disabled={saving} onClick={handlePayFullBalance}>
+                  Cobrar saldo completo ({formatUsd(finance.balance)})
+                </button>
+              )}
+            </div>
           </form>
           <ul className="finance-list">
             {detail?.payments.map(item => (

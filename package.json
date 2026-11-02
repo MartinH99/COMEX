@@ -10,7 +10,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "db:push": "node --env-file-if-exists=.env scripts/db-push.js",
-    "test": "node --test tests/"
+    "test": "node --test \"tests/**/*.test.js\""
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",

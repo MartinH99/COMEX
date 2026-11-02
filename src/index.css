@@ -194,6 +194,7 @@ table.table th {
 table.table td { padding: 9px 14px; border-bottom: 1px solid var(--border-row); font-size: 13px; vertical-align: middle; }
 table.table tbody tr:hover td { background: #FCFBF8; }
 table.table tbody tr:last-child td { border-bottom: none; }
+table.table-compact th, table.table-compact td { padding-left: 9px; padding-right: 9px; }
 table.table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 table.table tfoot td { padding: 12px 14px; border-top: 1px solid var(--border); border-bottom: none; background: var(--panel-soft); font-weight: 700; }
 .strong { font-weight: 600; }
@@ -296,7 +297,7 @@ table.table td input { padding: 5px 8px; font-size: 13px; text-align: right; max
 .finance-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 16px 24px; }
 .finance-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end; margin-bottom: 10px; }
 .finance-form-wide { grid-column: 1 / -1; }
-.finance-form .btn { justify-self: start; }
+.finance-form-actions { display: flex; flex-wrap: wrap; grid-column: 1 / -1; gap: 8px; }
 table.table td .finance-form input { max-width: none; margin: 0; text-align: left; }
 .finance-list { margin: 0; padding: 0; list-style: none; }
 .finance-list li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border-row); font-size: 12.5px; }

@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { apiFetch } from '../api';
 import { buildShipmentSheets, downloadExcel } from '../lib/excelExport';
 import { ListFilters, matchesDateRange, matchesSearch } from './ListFilters';
+import { PAYMENT_BADGE, getFinance } from '../lib/finance';
 import { NOTIFICATION_TYPES } from './NotificationCenter';
 import { ShipmentFinance } from './ShipmentFinance';
 import { Modal, StatusBadge, formatDate, formatDateTime, formatUsd } from './ui';
@@ -255,7 +256,7 @@ export function ShipmentList({ shipments, clients, readOnly, initialOpenId, acti
           <div className="empty">No hay embarques para mostrar.</div>
         ) : (
           <div className="scroll-x">
-            <table className="table">
+            <table className="table table-compact">
               <thead>
                 <tr>
                   <th>Código</th>
@@ -264,6 +265,7 @@ export function ShipmentList({ shipments, clients, readOnly, initialOpenId, acti
                   <th>Salida</th>
                   <th>Entrega est.</th>
                   <th>Estado</th>
+                  {!readOnly && <th>Cobro</th>}
                   <th className="num">Cajas</th>
                   <th className="num">Dif. entrega</th>
                   <th className="num">Total USD</th>
@@ -283,6 +285,11 @@ export function ShipmentList({ shipments, clients, readOnly, initialOpenId, acti
                         <td data-label="Salida">W{s.loadWeek}</td>
                         <td data-label="Entrega est.">{s.deliveryDate ? formatDate(s.deliveryDate) : (s.etaWeek || '—')}</td>
                         <td data-label="Estado"><StatusBadge status={s.status} /></td>
+                        {!readOnly && (
+                          <td data-label="Cobro">
+                            <span className={`badge ${PAYMENT_BADGE[getFinance(s).paymentStatus]}`}>{getFinance(s).paymentStatus}</span>
+                          </td>
+                        )}
                         <td data-label="Cajas" className="num">{s.boxes.toLocaleString('en-US')}</td>
                         <td data-label="Dif. entrega" className="num"><DifferenceBadge shipment={s} /></td>
                         <td data-label="Total USD" className="num strong">{formatUsd(s.totalUsd)}</td>
@@ -305,7 +312,7 @@ export function ShipmentList({ shipments, clients, readOnly, initialOpenId, acti
                       </tr>
                       {isOpen && (
                         <tr className="detail-row">
-                          <td colSpan={10}>
+                          <td colSpan={readOnly ? 10 : 11}>
                             <div className="detail-grid">
                               <div>
                                 <CaliberDetail shipment={s} readOnly={readOnly} onEdit={onEdit} onRegisterDelivery={shipment => setDeliveryShipmentId(shipment.id)} />
@@ -329,7 +336,7 @@ export function ShipmentList({ shipments, clients, readOnly, initialOpenId, acti
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={6}>{visible.length} {visible.length === 1 ? 'embarque' : 'embarques'}</td>
+                  <td colSpan={readOnly ? 6 : 7}>{visible.length} {visible.length === 1 ? 'embarque' : 'embarques'}</td>
                   <td data-label="Cajas" className="num">{totalBoxes.toLocaleString('en-US')}</td>
                   <td />
                   <td data-label="Total USD" className="num">{formatUsd(totalUsd)}</td>
