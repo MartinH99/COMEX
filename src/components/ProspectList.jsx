@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { buildProspectSheets, downloadExcel } from '../lib/excelExport';
 import { downloadProspectPdf } from '../lib/prospectPdf';
 import { ListFilters, matchesDateRange, matchesSearch } from './ListFilters';
+import { Pagination, usePagination } from './Pagination';
 import { PROSPECT_STATUSES } from './ProspectForm';
 import { formatDate, formatUsd } from './ui';
 
@@ -44,6 +45,8 @@ export function ProspectList({ prospects, readOnly, onNew, onEdit, onDelete, onC
     return matchesSearch(filters.search, [p.company, p.country, p.contact, p.email, p.product, p.port])
       && matchesDateRange(p.validUntil, filters.from, filters.to);
   });
+
+  const { pageItems, page, totalPages, setPage } = usePagination(visible, JSON.stringify([statusFilter, filters]));
 
   const open = prospects.filter(isOpen);
   const openUsd = open.reduce((sum, p) => sum + p.totalUsd, 0);
@@ -131,7 +134,7 @@ export function ProspectList({ prospects, readOnly, onNew, onEdit, onDelete, onC
                 </tr>
               </thead>
               <tbody>
-                {visible.map(p => {
+                {pageItems.map(p => {
                   const expired = isOpen(p) && p.validUntil && p.validUntil < today;
                   return (
                     <tr key={p.id}>
@@ -196,6 +199,8 @@ export function ProspectList({ prospects, readOnly, onNew, onEdit, onDelete, onC
           </div>
         )}
       </div>
+
+      <Pagination page={page} totalPages={totalPages} setPage={setPage} />
     </section>
   );
 }

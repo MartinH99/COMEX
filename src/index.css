@@ -285,6 +285,30 @@ table.table td input { padding: 5px 8px; font-size: 13px; text-align: right; max
 .notice { max-width: 560px; padding: 20px; }
 .notice p { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-soft); }
 
+/* ===== LOGÍSTICA Y DOCUMENTOS ===== */
+.detail-extra { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.logistics h3, .documents h3 { display: flex; align-items: center; gap: 10px; min-height: 30px; margin-bottom: 8px; font-size: 13px; font-weight: 600; }
+.logistics-edit { margin-left: auto; font-family: var(--font); }
+.logistics-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.logistics-wide { grid-column: 1 / -1; }
+.logistics-actions { display: flex; justify-content: flex-end; gap: 8px; }
+table.table td .logistics-form input { max-width: none; margin: 0; text-align: left; }
+.logistics-data { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px 14px; margin: 0; }
+.logistics-data dt { font-size: 11px; font-weight: 600; color: var(--text-soft); }
+.logistics-data dd { margin: 1px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+.documents-upload { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; margin-bottom: 10px; }
+.documents-upload select { width: auto; padding: 5px 8px; font-size: 13px; }
+.documents-check { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 5px; font-weight: 500; cursor: pointer; }
+table.table td .documents-check input { display: inline-block; width: auto; min-height: 0; margin: 0; accent-color: var(--highlight); }
+.documents-file { display: none; }
+table.table td .documents-file { display: none; }
+.documents-upload .kpi-sub { margin-bottom: 5px; }
+.documents-list { margin: 0; padding: 0; list-style: none; }
+.documents-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border-row); }
+.documents-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-size: 12.5px; overflow-wrap: anywhere; }
+.documents-info a { color: var(--tint-tx); font-weight: 600; }
+.pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 4px 0 16px; }
+
 /* ===== COSTOS Y COBROS ===== */
 .finance { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
 .finance h3 { margin-bottom: 10px; font-size: 13px; font-weight: 600; }

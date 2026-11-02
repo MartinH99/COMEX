@@ -15,6 +15,9 @@ delete process.env.TURSO_AUTH_TOKEN;
 delete process.env.VERCEL;
 process.env.ADMIN_USERNAME = 'admin-test';
 process.env.ADMIN_PASSWORD = ADMIN_PASSWORD;
+process.env.DOCUMENTS_DIR = path.join(tempDir, 'documentos');
+delete process.env.BLOB_STORE_ID;
+delete process.env.BLOB_READ_WRITE_TOKEN;
 
 const { default: app } = await import('../server/app.js');
 const { default: db } = await import('../server/db.js');
@@ -25,7 +28,7 @@ let baseUrl;
 
 function createSession() {
   let cookie = '';
-  return async (route, method = 'GET', body) => {
+  const session = async (route, method = 'GET', body) => {
     const response = await fetch(baseUrl + route, {
       method,
       headers: { 'Content-Type': 'application/json', ...(cookie ? { cookie } : {}) },
@@ -38,7 +41,22 @@ function createSession() {
     try { data = JSON.parse(text); } catch { /* respuesta sin JSON, como un 404 de Express */ }
     return { status: response.status, data, text, setCookie };
   };
+  session.cookie = () => cookie;
+  session.raw = async (route, buffer) => {
+    const response = await fetch(baseUrl + route, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream', cookie },
+      body: buffer
+    });
+    const text = await response.text();
+    let data = text;
+    try { data = JSON.parse(text); } catch { /* sin JSON */ }
+    return { status: response.status, data, text };
+  };
+  return session;
 }
+
+const fetchRaw = (session, route) => fetch(baseUrl + route, { headers: session.cookie() ? { cookie: session.cookie() } : {} });
 
 const newShipment = (clientId, product = 'Kiwi') => ({
   clientId, product, condition: 'Venta', deal: 'Precio Cerrado', loadWeek: 20, port: 'Rotterdam', paymentTerms: '30 días',
@@ -335,6 +353,163 @@ describe('costos y cobros', () => {
     await admin(`/api/shipments/${shipment.id}/costs`, 'POST', { category: 'x', amountUsd: 5 });
     assert.equal((await admin(`/api/shipments/${shipment.id}`, 'DELETE')).status, 200);
     assert.equal((await admin(`/api/shipments/${shipment.id}/finance`)).status, 404);
+  });
+});
+
+describe('datos logísticos', () => {
+  const data = { carrier: 'Naviera X', vessel: 'Buque Y', containerNumber: 'ABCD1234567', bookingNumber: 'BK1', actualDeparture: '2030-01-01', actualArrival: '2030-01-20' };
+
+  test('el admin los guarda y el cliente dueño los ve en su historial', async () => {
+    const saved = await admin(`/api/shipments/${shipmentA.id}/logistics`, 'PATCH', data);
+    assert.equal(saved.status, 200);
+    assert.equal(saved.data.containerNumber, 'ABCD1234567');
+    const mine = (await clientA('/api/shipments')).data.find(s => s.id === shipmentA.id);
+    assert.equal(mine.vessel, 'Buque Y');
+    const history = (await clientA(`/api/shipments/${shipmentA.id}/notifications`)).data;
+    assert.ok(history.some(n => n.type === 'logistics'));
+    assert.ok(history.every(n => n.author === null));
+  });
+
+  test('un cliente no los puede modificar', async () => {
+    assert.equal((await clientA(`/api/shipments/${shipmentA.id}/logistics`, 'PATCH', data)).status, 403);
+  });
+
+  test('rechaza fechas invertidas o inválidas', async () => {
+    const route = `/api/shipments/${shipmentB.id}/logistics`;
+    assert.equal((await admin(route, 'PATCH', { actualDeparture: '2030-02-01', actualArrival: '2030-01-01' })).status, 400);
+    assert.equal((await admin(route, 'PATCH', { actualDeparture: 'ayer' })).status, 400);
+    assert.equal((await admin('/api/shipments/999999/logistics', 'PATCH', {})).status, 404);
+  });
+});
+
+describe('documentos', () => {
+  const upload = async (session, shipmentId, name, body, { category = 'Factura', visible = '1' } = {}) => {
+    const cookieSession = await session('/api/auth/me');
+    assert.equal(cookieSession.status, 200);
+    return session.raw(`/api/shipments/${shipmentId}/documents?${new URLSearchParams({ name, category, visibleToClient: visible })}`, body);
+  };
+
+  let visibleDoc;
+  let internalDoc;
+
+  before(async () => {
+    visibleDoc = (await upload(admin, shipmentA.id, 'factura ñ.pdf', Buffer.from('%PDF-contenido-visible'))).data;
+    internalDoc = (await upload(admin, shipmentA.id, 'interno.pdf', Buffer.from('%PDF-contenido-interno'), { visible: '0' })).data;
+  });
+
+  test('el admin sube y descarga un archivo intacto', async () => {
+    const response = await fetchRaw(admin, `/api/documents/${visibleDoc.id}/download`);
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), '%PDF-contenido-visible');
+    assert.match(response.headers.get('content-disposition'), /^attachment; filename\*=UTF-8''factura%20%C3%B1\.pdf$/);
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(response.headers.get('content-type'), 'application/pdf');
+  });
+
+  test('el cliente dueño ve y descarga solo lo visible', async () => {
+    const list = (await clientA(`/api/shipments/${shipmentA.id}/documents`)).data;
+    assert.deepEqual(list.map(d => d.id), [visibleDoc.id]);
+    assert.equal(list[0].uploadedBy, null);
+    assert.equal((await fetchRaw(clientA, `/api/documents/${visibleDoc.id}/download`)).status, 200);
+    assert.equal((await fetchRaw(clientA, `/api/documents/${internalDoc.id}/download`)).status, 404);
+  });
+
+  test('otro cliente no ve ni descarga documentos ajenos', async () => {
+    assert.deepEqual((await clientB(`/api/shipments/${shipmentA.id}/documents`)).data, []);
+    assert.equal((await fetchRaw(clientB, `/api/documents/${visibleDoc.id}/download`)).status, 404);
+    assert.deepEqual((await pending(`/api/shipments/${shipmentA.id}/documents`)).data, []);
+    assert.equal((await fetchRaw(pending, `/api/documents/${visibleDoc.id}/download`)).status, 404);
+  });
+
+  test('sin sesión no se accede', async () => {
+    const anonymous = createSession();
+    assert.equal((await fetchRaw(anonymous, `/api/documents/${visibleDoc.id}/download`)).status, 401);
+  });
+
+  test('un cliente no sube ni borra', async () => {
+    assert.equal((await clientA.raw(`/api/shipments/${shipmentA.id}/documents?name=a.pdf&category=Factura`, Buffer.from('x'))).status, 403);
+    assert.equal((await clientA(`/api/documents/${visibleDoc.id}`, 'DELETE')).status, 403);
+  });
+
+  test('rechaza formatos peligrosos, tipos inválidos y archivos vacíos', async () => {
+    assert.equal((await upload(admin, shipmentB.id, 'virus.exe', Buffer.from('x'))).status, 400);
+    assert.equal((await upload(admin, shipmentB.id, 'pagina.html', Buffer.from('<script>'))).status, 400);
+    assert.equal((await upload(admin, shipmentB.id, 'a.pdf', Buffer.from('x'), { category: 'Inventado' })).status, 400);
+    assert.equal((await upload(admin, shipmentB.id, 'a.pdf', Buffer.alloc(0))).status, 400);
+    assert.equal((await upload(admin, 999999, 'a.pdf', Buffer.from('x'))).status, 404);
+  });
+
+  test('rechaza archivos de más de 4 MB', async () => {
+    const response = await upload(admin, shipmentB.id, 'grande.pdf', Buffer.alloc(4 * 1024 * 1024 + 1));
+    assert.equal(response.status, 413);
+    assert.match(response.data.error, /4 MB/);
+  });
+
+  test('un nombre con ruta no sale de la carpeta de documentos', async () => {
+    const response = await upload(admin, shipmentB.id, '../../../secreto.pdf', Buffer.from('x'));
+    assert.equal(response.status, 201);
+    assert.equal(response.data.fileName, 'secreto.pdf');
+    const stored = fs.readdirSync(path.join(process.env.DOCUMENTS_DIR, 'documentos', String(shipmentB.id)));
+    assert.ok(stored.every(name => /^[0-9a-f-]{36}\.pdf$/.test(name)));
+  });
+
+  test('borrar un documento y un embarque elimina los archivos', async () => {
+    const shipment = (await admin('/api/shipments', 'POST', newShipment(companyB.id))).data;
+    const doc = (await upload(admin, shipment.id, 'a.pdf', Buffer.from('x'))).data;
+    const folder = path.join(process.env.DOCUMENTS_DIR, 'documentos', String(shipment.id));
+    assert.equal(fs.readdirSync(folder).length, 1);
+    assert.equal((await admin(`/api/documents/${doc.id}`, 'DELETE')).status, 200);
+    assert.equal(fs.readdirSync(folder).length, 0);
+    await upload(admin, shipment.id, 'b.pdf', Buffer.from('x'));
+    await admin(`/api/shipments/${shipment.id}`, 'DELETE');
+    assert.equal(fs.readdirSync(folder).length, 0);
+  });
+});
+
+describe('cuentas de equipo', () => {
+  let secondAdmin;
+
+  before(async () => {
+    const created = await admin('/api/users', 'POST', { username: 'admin-dos', password: 'clave-de-prueba-2', fullName: 'Segunda Persona' });
+    assert.equal(created.status, 201);
+    assert.equal(created.data.role, 'admin');
+    secondAdmin = createSession();
+    assert.equal((await secondAdmin('/api/auth/login', 'POST', { username: 'admin-dos', password: 'clave-de-prueba-2' })).status, 200);
+  });
+
+  test('un cliente no crea administradores', async () => {
+    assert.equal((await clientA('/api/users', 'POST', { username: 'malo', password: 'clave-de-prueba-2', fullName: 'X' })).status, 403);
+  });
+
+  test('valida usuario y contraseña', async () => {
+    assert.equal((await admin('/api/users', 'POST', { username: 'admin-dos', password: 'clave-de-prueba-2', fullName: 'X' })).status, 409);
+    assert.equal((await admin('/api/users', 'POST', { username: 'corta', password: '123', fullName: 'X' })).status, 400);
+    assert.equal((await admin('/api/users', 'POST', { username: 'con espacios', password: 'clave-de-prueba-2', fullName: 'X' })).status, 400);
+  });
+
+  test('cada cambio queda con su autor', async () => {
+    const shipment = (await secondAdmin('/api/shipments', 'POST', newShipment(companyA.id))).data;
+    await admin(`/api/shipments/${shipment.id}/followups`, 'POST', { note: 'nota' });
+    const history = (await admin(`/api/shipments/${shipment.id}/notifications`)).data;
+    assert.equal(history.find(n => n.type === 'created').author, 'Segunda Persona');
+    assert.equal(history.find(n => n.type === 'followup').author, 'Administrador');
+  });
+
+  test('las notificaciones leídas son de cada usuario', async () => {
+    const shipment = (await admin('/api/shipments', 'POST', newShipment(companyB.id))).data;
+    const find = async (session) => (await session('/api/notifications')).data.items.find(n => n.shipmentId === shipment.id);
+    const notification = await find(admin);
+    assert.equal(notification.isRead, 0);
+
+    const before = (await secondAdmin('/api/notifications')).data.unread;
+    assert.equal((await admin(`/api/notifications/${notification.id}/read`, 'PATCH')).status, 200);
+    assert.equal((await find(admin)).isRead, 1);
+    assert.equal((await find(secondAdmin)).isRead, 0);
+    assert.equal((await secondAdmin('/api/notifications')).data.unread, before);
+
+    await secondAdmin('/api/notifications/read-all', 'POST', {});
+    assert.equal((await secondAdmin('/api/notifications')).data.unread, 0);
+    assert.equal((await admin('/api/notifications/999999/read', 'PATCH')).status, 404);
   });
 });
 

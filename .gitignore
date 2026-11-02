@@ -29,6 +29,7 @@ dist-ssr
 .vercel
 server/*.db
 server/*.db-*
+server/uploads
 
 # Agentes y configuración local de Claude Code
 .claude

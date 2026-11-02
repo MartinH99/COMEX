@@ -83,6 +83,7 @@ export default function ClientPortal({ user, onLogout }) {
         clients={clients}
         initialOpenId={focus.shipmentId}
         activityVersion={0}
+        onLogisticsSaved={() => {}}
       />
     );
   };

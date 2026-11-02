@@ -4,7 +4,10 @@ import { buildShipmentSheets, downloadExcel } from '../lib/excelExport';
 import { ListFilters, matchesDateRange, matchesSearch } from './ListFilters';
 import { PAYMENT_BADGE, getFinance } from '../lib/finance';
 import { NOTIFICATION_TYPES } from './NotificationCenter';
+import { Pagination, usePagination } from './Pagination';
+import { ShipmentDocuments } from './ShipmentDocuments';
 import { ShipmentFinance } from './ShipmentFinance';
+import { ShipmentLogistics } from './ShipmentLogistics';
 import { Modal, StatusBadge, formatDate, formatDateTime, formatUsd } from './ui';
 
 const SHIPMENT_STATUSES = ['Programado', 'En Tránsito', 'Entregado'];
@@ -137,7 +140,7 @@ function Tracking({ shipment, readOnly, activityVersion, onChangeStatus, onRegis
           {history.map(item => (
             <li key={item.id}>
               {item.message}
-              <span className="when">{NOTIFICATION_TYPES[item.type]?.label || item.type} · {formatDateTime(item.createdAt)}</span>
+              <span className="when">{NOTIFICATION_TYPES[item.type]?.label || item.type} · {formatDateTime(item.createdAt)}{item.author ? ` · ${item.author}` : ''}</span>
             </li>
           ))}
         </ul>
@@ -199,7 +202,7 @@ function CaliberDetail({ shipment, readOnly, onEdit, onRegisterDelivery }) {
   );
 }
 
-export function ShipmentList({ shipments, clients, readOnly, initialOpenId, activityVersion, onNew, onEdit, onDelete, onRegisterDelivery, onChangeStatus, onAddFollowUp, onFinanceChanged }) {
+export function ShipmentList({ shipments, clients, readOnly, initialOpenId, activityVersion, onNew, onEdit, onDelete, onRegisterDelivery, onChangeStatus, onAddFollowUp, onFinanceChanged, onLogisticsSaved }) {
   const [statusFilter, setStatusFilter] = useState('Todos');
   const [openId, setOpenId] = useState(initialOpenId ?? null);
   const [deliveryShipmentId, setDeliveryShipmentId] = useState(null);
@@ -219,6 +222,11 @@ export function ShipmentList({ shipments, clients, readOnly, initialOpenId, acti
     return matchesSearch(filters.search, [s.code, client?.company, client?.country, s.product, s.port, s.condition])
       && matchesDateRange(s.deliveryDate, filters.from, filters.to);
   });
+  const { pageItems, page, totalPages, setPage } = usePagination(
+    visible,
+    JSON.stringify([statusFilter, filters]),
+    visible.findIndex(s => s.id === initialOpenId)
+  );
   const totalBoxes = visible.reduce((sum, s) => sum + (s.boxes || 0), 0);
   const totalUsd = visible.reduce((sum, s) => sum + (s.totalUsd || 0), 0);
   const deliveryShipment = shipments.find(s => s.id === deliveryShipmentId);
@@ -273,7 +281,7 @@ export function ShipmentList({ shipments, clients, readOnly, initialOpenId, acti
                 </tr>
               </thead>
               <tbody>
-                {visible.map(s => {
+                {pageItems.map(s => {
                   const client = clients.find(c => c.id === s.clientId);
                   const isOpen = openId === s.id;
                   return (
@@ -326,6 +334,10 @@ export function ShipmentList({ shipments, clients, readOnly, initialOpenId, acti
                                 onAddFollowUp={onAddFollowUp}
                               />
                             </div>
+                            <div className="detail-grid detail-extra">
+                              <ShipmentLogistics shipment={s} readOnly={readOnly} onSaved={onLogisticsSaved} />
+                              <ShipmentDocuments shipment={s} readOnly={readOnly} />
+                            </div>
                             {!readOnly && <ShipmentFinance shipment={s} onChanged={onFinanceChanged} />}
                           </td>
                         </tr>
@@ -347,6 +359,8 @@ export function ShipmentList({ shipments, clients, readOnly, initialOpenId, acti
           </div>
         )}
       </div>
+
+      <Pagination page={page} totalPages={totalPages} setPage={setPage} />
 
       {deliveryShipment && (
         <DeliveryModal

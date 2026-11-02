@@ -8,6 +8,8 @@ export const NOTIFICATION_TYPES = {
   'created': { label: 'Nuevo embarque', badge: 'brand' },
   'updated': { label: 'Datos actualizados', badge: 'gray' },
   'deleted': { label: 'Eliminado', badge: 'alert' },
+  'logistics': { label: 'Logística', badge: 'brand' },
+  'document': { label: 'Documento', badge: 'gray' },
   'payment': { label: 'Cobro', badge: 'ok' },
   'payment-overdue': { label: 'Cobro vencido', badge: 'alert' },
   'due-soon': { label: 'Entrega próxima', badge: 'pend' },
@@ -46,7 +48,7 @@ export function NotificationCenter({ notifications, unread, onOpen, onReadAll, o
                   <span className="notification-time">{formatDateTime(n.createdAt)}</span>
                 </span>
                 <span className="notification-message">{n.message}</span>
-                <span className="mono notification-code">{n.shipmentCode}</span>
+                <span className="notification-code"><span className="mono">{n.shipmentCode}</span>{n.author ? ` · ${n.author}` : ''}</span>
               </button>
             );
           })}

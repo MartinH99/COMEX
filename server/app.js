@@ -1,11 +1,18 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { randomUUID } from 'node:crypto';
 import express from 'express';
 import db, { initDb, INSERT_SHIPMENT } from './db.js';
 import {
   LOCK_MINUTES, MAX_FAILED_LOGINS, SESSION_DAYS, clearedSessionCookie, generateToken, hashPassword,
   hashToken, readSessionToken, sessionCookie, verifyDummyPassword, verifyPassword
 } from './auth.js';
+import { deleteFile, isStorageAvailable, readFile, saveFile } from './storage.js';
 
 const app = express();
+
+// Quién hace cada pedido, para registrarlo en el historial sin pasarlo de función en función
+const requestContext = new AsyncLocalStorage();
+const currentAuthor = () => requestContext.getStore()?.author ?? null;
 
 app.use(express.json());
 
@@ -157,7 +164,7 @@ app.post('/api/auth/login', async (req, res) => {
 // A partir de acá todo requiere sesión
 app.use('/api', (req, res, next) => {
   if (!req.user) return res.status(401).json({ error: 'Iniciá sesión para continuar.' });
-  next();
+  requestContext.run({ author: req.user.fullName || req.user.username }, next);
 });
 
 // POST /api/auth/logout
@@ -202,6 +209,8 @@ const CLIENT_ALLOWED_READS = [
   /^\/api\/clients$/,
   /^\/api\/shipments$/,
   /^\/api\/shipments\/\d+\/notifications$/,
+  /^\/api\/shipments\/\d+\/documents$/,
+  /^\/api\/documents\/\d+\/download$/,
   /^\/api\/prospectos$/
 ];
 
@@ -213,6 +222,32 @@ app.use('/api', (req, res, next) => {
 });
 
 const isClient = (req) => req.user.role === 'client';
+
+// POST /api/users: alta de otro administrador del equipo
+app.post('/api/users', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const fullName = (req.body.fullName || '').trim();
+
+    if (typeof username !== 'string' || !USERNAME_PATTERN.test(username)) {
+      return res.status(400).json({ error: 'El usuario debe tener entre 3 y 60 caracteres, sin espacios.' });
+    }
+    if (!isValidPassword(password)) {
+      return res.status(400).json({ error: `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.` });
+    }
+    if (!fullName) return res.status(400).json({ error: 'Indicá el nombre.' });
+
+    const result = await db.execute({
+      sql: "INSERT INTO users (username, password_hash, role, status, full_name) VALUES (?, ?, 'admin', 'active', ?)",
+      args: [username, await hashPassword(password), fullName]
+    });
+    const { rows } = await db.execute({ sql: `${SELECT_USER} WHERE u.id = ?`, args: [Number(result.lastInsertRowid)] });
+    res.status(201).json({ ...rows[0] });
+  } catch (error) {
+    if (error.message.includes('UNIQUE')) return res.status(409).json({ error: 'Ese usuario ya existe.' });
+    res.status(500).json({ error: 'Error al crear el usuario: ' + error.message });
+  }
+});
 
 // GET /api/users
 app.get('/api/users', async (req, res) => {
@@ -296,7 +331,9 @@ const SELECT_SHIPMENT = `
     s.eta_week AS etaWeek, s.transport, s.port, s.payment_terms AS paymentTerms,
     s.variance, s.boxes, s.total_usd AS totalUsd, s.status, s.created_at AS createdAt,
     s.delivery_date AS deliveryDate, s.delivered_boxes AS deliveredBoxes,
-    s.payment_due_date AS paymentDueDate
+    s.payment_due_date AS paymentDueDate, s.carrier, s.vessel,
+    s.container_number AS containerNumber, s.booking_number AS bookingNumber,
+    s.actual_departure AS actualDeparture, s.actual_arrival AS actualArrival
   FROM shipments s
 `;
 
@@ -306,20 +343,27 @@ const plain = row => ({ ...row });
 const SHIPMENT_STATUSES = ['Programado', 'En Tránsito', 'Entregado'];
 const REMINDER_DAYS = 3;
 
-const SELECT_NOTIFICATION = `
+const SELECT_HISTORY = `
   SELECT
     id, shipment_id AS shipmentId, shipment_code AS shipmentCode, type, message,
-    is_read AS isRead, created_at AS createdAt
+    author, created_at AS createdAt
   FROM notifications
+`;
+
+// Cada usuario tiene sus propias leídas; is_read conserva lo marcado antes de que existieran
+const READ_EXPRESSION = `
+  (n.is_read = 1 OR EXISTS (
+    SELECT 1 FROM notification_reads r WHERE r.notification_id = n.id AND r.user_id = ?
+  ))
 `;
 
 // Registra un evento de un embarque existente; el mensaje es SQL para poder usar sus columnas
 const notifyFromShipment = (id, type, messageSql, messageArgs = [], extraWhere = '', extraArgs = []) => ({
   sql: `
-    INSERT INTO notifications (shipment_id, shipment_code, type, message)
-    SELECT id, code, ?, ${messageSql} FROM shipments WHERE id = ? ${extraWhere}
+    INSERT INTO notifications (shipment_id, shipment_code, type, author, message)
+    SELECT id, code, ?, ?, ${messageSql} FROM shipments WHERE id = ? ${extraWhere}
   `,
-  args: [type, ...messageArgs, id, ...extraArgs]
+  args: [type, currentAuthor(), ...messageArgs, id, ...extraArgs]
 });
 
 // Fecha de hoy (AAAA-MM-DD) en Argentina, sumando días si hace falta
@@ -594,11 +638,11 @@ app.post('/api/shipments', async (req, res) => {
 
     statements.push({
       sql: `
-        INSERT INTO notifications (shipment_id, shipment_code, type, message)
-        SELECT id, code, 'created', 'Embarque registrado para ' || (SELECT company FROM clients WHERE id = client_id)
+        INSERT INTO notifications (shipment_id, shipment_code, type, author, message)
+        SELECT id, code, 'created', ?, 'Embarque registrado para ' || (SELECT company FROM clients WHERE id = client_id)
         FROM shipments WHERE code = ?
       `,
-      args: [generatedCode]
+      args: [currentAuthor(), generatedCode]
     });
     statements.push({ sql: `${SELECT_SHIPMENT} WHERE s.code = ?`, args: [generatedCode] });
 
@@ -608,6 +652,171 @@ app.post('/api/shipments', async (req, res) => {
     res.status(201).json({ ...plain(newShipment), calibres });
   } catch (error) {
     res.status(500).json({ error: 'Error al registrar embarque: ' + error.message });
+  }
+});
+
+const LOGISTICS_TEXT_FIELDS = ['carrier', 'vessel', 'containerNumber', 'bookingNumber'];
+const isOptionalDate = (value) => !value || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value));
+
+// PATCH /api/shipments/:id/logistics
+app.patch('/api/shipments/:id/logistics', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { actualDeparture, actualArrival } = req.body;
+    const values = LOGISTICS_TEXT_FIELDS.map(field => (typeof req.body[field] === 'string' ? req.body[field].trim() : ''));
+
+    if (values.some(value => value.length > 120)) {
+      return res.status(400).json({ error: 'Los datos logísticos son demasiado largos.' });
+    }
+    if (!isOptionalDate(actualDeparture) || !isOptionalDate(actualArrival)) {
+      return res.status(400).json({ error: 'Fecha inválida.' });
+    }
+    if (actualDeparture && actualArrival && actualArrival < actualDeparture) {
+      return res.status(400).json({ error: 'La llegada no puede ser anterior a la salida.' });
+    }
+
+    const [, , selected] = await db.batch([
+      notifyFromShipment(id, 'logistics', "'Se actualizaron los datos logísticos'"),
+      {
+        sql: `
+          UPDATE shipments SET carrier = ?, vessel = ?, container_number = ?, booking_number = ?,
+            actual_departure = ?, actual_arrival = ?
+          WHERE id = ?
+        `,
+        args: [...values.map(value => value || null), actualDeparture || null, actualArrival || null, id]
+      },
+      { sql: `${SELECT_SHIPMENT} WHERE s.id = ?`, args: [id] }
+    ], 'write');
+
+    if (selected.rows.length === 0) return res.status(404).json({ error: 'Embarque no encontrado.' });
+    res.json(plain(selected.rows[0]));
+  } catch (error) {
+    res.status(500).json({ error: 'Error al guardar los datos logísticos: ' + error.message });
+  }
+});
+
+const MAX_DOCUMENT_BYTES = 4 * 1024 * 1024;
+const DOCUMENT_CATEGORIES = ['Factura', 'Packing list', 'Certificado fitosanitario', 'Bill of lading', 'Otro'];
+// El tipo sale de esta lista, nunca de lo que declara quien sube el archivo
+const DOCUMENT_TYPES = {
+  pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xls: 'application/vnd.ms-excel',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', doc: 'application/msword',
+  csv: 'text/csv', txt: 'text/plain'
+};
+
+const SELECT_DOCUMENT = `
+  SELECT id, shipment_id AS shipmentId, category, file_name AS fileName, content_type AS contentType,
+    size_bytes AS sizeBytes, visible_to_client AS visibleToClient, uploaded_by AS uploadedBy, created_at AS createdAt
+  FROM shipment_documents
+`;
+
+// Condición y argumentos para que un cliente solo alcance documentos visibles de sus embarques
+const clientDocumentScope = (req) => (isClient(req)
+  ? {
+      where: 'AND visible_to_client = 1 AND shipment_id IN (SELECT id FROM shipments WHERE client_id = ?)',
+      args: [req.user.clientId]
+    }
+  : { where: '', args: [] });
+
+// GET /api/shipments/:id/documents
+app.get('/api/shipments/:id/documents', async (req, res) => {
+  try {
+    const scope = clientDocumentScope(req);
+    const { rows } = await db.execute({
+      sql: `${SELECT_DOCUMENT} WHERE shipment_id = ? ${scope.where} ORDER BY id DESC`,
+      args: [Number(req.params.id), ...scope.args]
+    });
+    res.json(rows.map(row => (isClient(req) ? { ...row, uploadedBy: null } : plain(row))));
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener los documentos: ' + error.message });
+  }
+});
+
+// POST /api/shipments/:id/documents?name=&category=&visibleToClient=
+app.post('/api/shipments/:id/documents', express.raw({ type: () => true, limit: MAX_DOCUMENT_BYTES }), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const category = String(req.query.category || '');
+    // Solo el nombre final: nunca una ruta enviada por el navegador
+    const fileName = String(req.query.name || '').split(/[\\/]/).pop().trim().slice(0, 150);
+    const extension = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
+    const contentType = DOCUMENT_TYPES[extension];
+
+    if (!isStorageAvailable()) {
+      return res.status(503).json({ error: 'El almacenamiento de documentos todavía no está configurado.' });
+    }
+    if (!DOCUMENT_CATEGORIES.includes(category)) return res.status(400).json({ error: 'Tipo de documento inválido.' });
+    if (!contentType) return res.status(400).json({ error: 'Formato no permitido. Usá PDF, imagen, Excel, Word, CSV o TXT.' });
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) return res.status(400).json({ error: 'El archivo está vacío.' });
+    if (!(await findShipment(id))) return res.status(404).json({ error: 'Embarque no encontrado.' });
+
+    const storageKey = `documentos/${id}/${randomUUID()}.${extension}`;
+    await saveFile(storageKey, req.body, contentType);
+
+    try {
+      const [inserted] = await db.batch([
+        {
+          sql: `
+            INSERT INTO shipment_documents (shipment_id, category, file_name, content_type, size_bytes, storage_key, visible_to_client, uploaded_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `,
+          args: [id, category, fileName, contentType, req.body.length, storageKey, req.query.visibleToClient === '0' ? 0 : 1, currentAuthor()]
+        },
+        notifyFromShipment(id, 'document', "'Se agregó el documento ' || ?", [fileName])
+      ], 'write');
+      const { rows } = await db.execute({ sql: `${SELECT_DOCUMENT} WHERE id = ?`, args: [Number(inserted.lastInsertRowid)] });
+      res.status(201).json(plain(rows[0]));
+    } catch (error) {
+      // Sin su registro, el archivo quedaría inaccesible para siempre
+      await deleteFile(storageKey).catch(() => {});
+      throw error;
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Error al subir el documento: ' + error.message });
+  }
+});
+
+// GET /api/documents/:id/download
+app.get('/api/documents/:id/download', async (req, res) => {
+  try {
+    const scope = clientDocumentScope(req);
+    const { rows } = await db.execute({
+      sql: `SELECT file_name, content_type, storage_key FROM shipment_documents WHERE id = ? ${scope.where}`,
+      args: [Number(req.params.id), ...scope.args]
+    });
+    if (rows.length === 0) return res.status(404).json({ error: 'Documento no encontrado.' });
+
+    const stream = await readFile(rows[0].storage_key);
+    if (!stream) return res.status(404).json({ error: 'El archivo no está disponible en este entorno.' });
+
+    // Siempre como descarga: un archivo subido nunca se ejecuta dentro de la app
+    res.setHeader('Content-Type', rows[0].content_type);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(rows[0].file_name)}`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    stream.on('error', () => res.destroy());
+    stream.pipe(res);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al descargar el documento: ' + error.message });
+  }
+});
+
+// DELETE /api/documents/:id
+app.delete('/api/documents/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { rows } = await db.execute({ sql: 'SELECT shipment_id, file_name, storage_key FROM shipment_documents WHERE id = ?', args: [id] });
+    if (rows.length === 0) return res.status(404).json({ error: 'Documento no encontrado.' });
+
+    await db.batch([
+      notifyFromShipment(rows[0].shipment_id, 'document', "'Se eliminó el documento ' || ?", [rows[0].file_name]),
+      { sql: 'DELETE FROM shipment_documents WHERE id = ?', args: [id] }
+    ], 'write');
+    await deleteFile(rows[0].storage_key).catch(error => console.error('No se pudo borrar el archivo:', error.message));
+    res.json({ ok: true, id });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar el documento: ' + error.message });
   }
 });
 
@@ -746,12 +955,12 @@ app.delete('/api/shipments/:id/payments/:paymentId', async (req, res) => {
     const [, result] = await db.batch([
       {
         sql: `
-          INSERT INTO notifications (shipment_id, shipment_code, type, message)
-          SELECT s.id, s.code, 'payment', 'Se anuló un cobro de USD ' || printf('%.2f', p.amount_usd)
+          INSERT INTO notifications (shipment_id, shipment_code, type, author, message)
+          SELECT s.id, s.code, 'payment', ?, 'Se anuló un cobro de USD ' || printf('%.2f', p.amount_usd)
           FROM shipment_payments p JOIN shipments s ON s.id = p.shipment_id
           WHERE p.id = ? AND p.shipment_id = ?
         `,
-        args: [paymentId, id]
+        args: [currentAuthor(), paymentId, id]
       },
       { sql: 'DELETE FROM shipment_payments WHERE id = ? AND shipment_id = ?', args: [paymentId, id] }
     ], 'write');
@@ -926,15 +1135,16 @@ app.get('/api/shipments/:id/notifications', async (req, res) => {
     const { rows } = await db.execute(isClient(req)
       ? {
           sql: `
-            ${SELECT_NOTIFICATION}
-            WHERE shipment_id = ? AND type IN ('created', 'status', 'delivery')
+            ${SELECT_HISTORY}
+            WHERE shipment_id = ? AND type IN ('created', 'status', 'delivery', 'logistics')
               AND shipment_id IN (SELECT id FROM shipments WHERE client_id = ?)
             ORDER BY id DESC
           `,
           args: [Number(req.params.id), req.user.clientId]
         }
-      : { sql: `${SELECT_NOTIFICATION} WHERE shipment_id = ? ORDER BY id DESC`, args: [Number(req.params.id)] });
-    res.json(rows.map(plain));
+      : { sql: `${SELECT_HISTORY} WHERE shipment_id = ? ORDER BY id DESC`, args: [Number(req.params.id)] });
+    // El cliente no necesita saber quién del equipo hizo cada cambio
+    res.json(rows.map(row => (isClient(req) ? { ...row, author: null } : plain(row))));
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener el historial: ' + error.message });
   }
@@ -945,8 +1155,16 @@ app.get('/api/notifications', async (req, res) => {
   try {
     const results = await db.batch([
       ...reminderStatements(),
-      `${SELECT_NOTIFICATION} ORDER BY id DESC LIMIT 100`,
-      'SELECT COUNT(*) AS count FROM notifications WHERE is_read = 0'
+      {
+        sql: `
+          SELECT
+            n.id, n.shipment_id AS shipmentId, n.shipment_code AS shipmentCode, n.type, n.message, n.author,
+            n.created_at AS createdAt, ${READ_EXPRESSION} AS isRead
+          FROM notifications n ORDER BY n.id DESC LIMIT 100
+        `,
+        args: [req.user.id]
+      },
+      { sql: `SELECT COUNT(*) AS count FROM notifications n WHERE NOT ${READ_EXPRESSION}`, args: [req.user.id] }
     ], 'write');
 
     res.json({
@@ -961,7 +1179,10 @@ app.get('/api/notifications', async (req, res) => {
 // POST /api/notifications/read-all
 app.post('/api/notifications/read-all', async (req, res) => {
   try {
-    await db.execute('UPDATE notifications SET is_read = 1 WHERE is_read = 0');
+    await db.execute({
+      sql: 'INSERT OR IGNORE INTO notification_reads (user_id, notification_id) SELECT ?, id FROM notifications',
+      args: [req.user.id]
+    });
     res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ error: 'Error al actualizar notificaciones: ' + error.message });
@@ -972,8 +1193,14 @@ app.post('/api/notifications/read-all', async (req, res) => {
 app.patch('/api/notifications/:id/read', async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const result = await db.execute({ sql: 'UPDATE notifications SET is_read = 1 WHERE id = ?', args: [id] });
-    if (result.rowsAffected === 0) {
+    const { rows } = await db.execute({ sql: 'SELECT id FROM notifications WHERE id = ?', args: [id] });
+    if (rows.length > 0) {
+      await db.execute({
+        sql: 'INSERT OR IGNORE INTO notification_reads (user_id, notification_id) VALUES (?, ?)',
+        args: [req.user.id, id]
+      });
+    }
+    if (rows.length === 0) {
       return res.status(404).json({ error: 'Notificación no encontrada.' });
     }
     res.json({ ok: true, id });
@@ -1200,8 +1427,11 @@ app.delete('/api/shipments/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
     // Borrado explícito de calibres: no dependemos de PRAGMA foreign_keys en la conexión remota
+    const documents = await db.execute({ sql: 'SELECT storage_key FROM shipment_documents WHERE shipment_id = ?', args: [id] });
+
     const results = await db.batch([
       notifyFromShipment(id, 'deleted', "'Embarque eliminado'"),
+      { sql: 'DELETE FROM shipment_documents WHERE shipment_id = ?', args: [id] },
       { sql: 'DELETE FROM shipment_costs WHERE shipment_id = ?', args: [id] },
       { sql: 'DELETE FROM shipment_payments WHERE shipment_id = ?', args: [id] },
       // Las notificaciones sobreviven al embarque, pero ya no apuntan a él
@@ -1216,10 +1446,20 @@ app.delete('/api/shipments/:id', async (req, res) => {
       return res.status(404).json({ error: 'Embarque no encontrado.' });
     }
 
+    // Con el embarque ya borrado, un archivo que no se pueda eliminar no debe frenar la respuesta
+    await Promise.allSettled(documents.rows.map(row => deleteFile(row.storage_key)));
+
     res.json({ ok: true, id });
   } catch (error) {
     res.status(500).json({ error: 'Error al eliminar embarque: ' + error.message });
   }
+});
+
+// Archivos que superan el máximo o JSON inválido: siempre una respuesta legible
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+  if (error.type === 'entity.too.large') return res.status(413).json({ error: 'El archivo supera el máximo de 4 MB.' });
+  res.status(error.status || 500).json({ error: error.status ? 'Pedido inválido.' : 'Error interno.' });
 });
 
 export default app;

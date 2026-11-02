@@ -12,7 +12,7 @@ export function buildShipmentSheets(shipments, clients, { includeFinance = false
   const clientOf = (shipment) => clients.find(c => c.id === shipment.clientId);
 
   const main = [
-    header(['Código', 'Cliente', 'País', 'Producto', 'Condición', 'Modalidad', 'Semana de salida', 'Entrega estimada', 'Puerto', 'Transporte', 'Estado', 'Cajas', 'Cajas entregadas', 'Diferencia de cajas', 'Tolerancia %', 'Total USD', 'Condición de pago', ...(includeFinance ? ['Vencimiento del pago', 'Costos USD', 'Margen USD', 'Margen %', 'Cobrado USD', 'Saldo USD', 'Estado de cobro'] : [])]),
+    header(['Código', 'Cliente', 'País', 'Producto', 'Condición', 'Modalidad', 'Semana de salida', 'Entrega estimada', 'Puerto', 'Transporte', 'Estado', 'Cajas', 'Cajas entregadas', 'Diferencia de cajas', 'Tolerancia %', 'Total USD', 'Condición de pago', 'Transportista', 'Buque / vuelo / patente', 'Contenedor / guía', 'Booking', 'Salida real', 'Llegada real', ...(includeFinance ? ['Vencimiento del pago', 'Costos USD', 'Margen USD', 'Margen %', 'Cobrado USD', 'Saldo USD', 'Estado de cobro'] : [])]),
     ...shipments.map(s => {
       const client = clientOf(s);
       const delivered = s.deliveredBoxes ?? null;
@@ -22,6 +22,7 @@ export function buildShipmentSheets(shipments, clients, { includeFinance = false
         int(s.loadWeek), date(s.deliveryDate), text(s.port), text(s.transport), text(s.status),
         int(s.boxes), int(delivered), int(delivered === null ? null : delivered - s.boxes),
         { type: Number, value: s.variance ?? 0 }, usd(s.totalUsd), text(s.paymentTerms),
+        text(s.carrier), text(s.vessel), text(s.containerNumber), text(s.bookingNumber), date(s.actualDeparture), date(s.actualArrival),
         ...(finance ? [
           date(s.paymentDueDate), usd(finance.costs), usd(finance.margin),
           { type: Number, value: Math.round(finance.marginPercent * 10) / 10, format: '0.0' },
@@ -41,7 +42,7 @@ export function buildShipmentSheets(shipments, clients, { includeFinance = false
   ];
 
   return [
-    { data: main, sheet: 'Embarques', stickyRowsCount: 1, columns: [18, 28, 14, 20, 12, 18, 10, 12, 18, 12, 13, 9, 11, 11, 10, 13, 30, ...(includeFinance ? [12, 12, 12, 9, 12, 12, 13] : [])].map(width => ({ width })) },
+    { data: main, sheet: 'Embarques', stickyRowsCount: 1, columns: [18, 28, 14, 20, 12, 18, 10, 12, 18, 12, 13, 9, 11, 11, 10, 13, 30, 18, 20, 18, 16, 12, 12, ...(includeFinance ? [12, 12, 12, 9, 12, 12, 13] : [])].map(width => ({ width })) },
     { data: calibers, sheet: 'Calibres', stickyRowsCount: 1, columns: [18, 28, 9, 9, 10, 13].map(width => ({ width })) }
   ];
 }

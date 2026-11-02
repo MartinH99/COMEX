@@ -52,6 +52,12 @@ const SCHEMA = [
     delivery_date TEXT,
     delivered_boxes INTEGER CHECK (delivered_boxes >= 0),
     payment_due_date TEXT,
+    carrier       TEXT,
+    vessel        TEXT,
+    container_number TEXT,
+    booking_number TEXT,
+    actual_departure TEXT,
+    actual_arrival TEXT,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE TABLE IF NOT EXISTS shipment_costs (
@@ -93,8 +99,27 @@ const SCHEMA = [
     message       TEXT NOT NULL,
     is_read       INTEGER NOT NULL DEFAULT 0,
     dedupe_key    TEXT UNIQUE,
+    author        TEXT,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS notification_reads (
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    notification_id INTEGER NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, notification_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS shipment_documents (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    shipment_id  INTEGER NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
+    category     TEXT NOT NULL,
+    file_name    TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    size_bytes   INTEGER NOT NULL,
+    storage_key  TEXT NOT NULL UNIQUE,
+    visible_to_client INTEGER NOT NULL DEFAULT 1,
+    uploaded_by  TEXT,
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_documents_shipment ON shipment_documents(shipment_id)',
   `CREATE TABLE IF NOT EXISTS prospectos (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     client_id     INTEGER REFERENCES clients(id) ON DELETE SET NULL,
@@ -156,23 +181,33 @@ const SCHEMA = [
 const SHIPMENT_COLUMNS = [
   ['delivery_date', 'delivery_date TEXT'],
   ['delivered_boxes', 'delivered_boxes INTEGER CHECK (delivered_boxes >= 0)'],
-  ['payment_due_date', 'payment_due_date TEXT']
+  ['payment_due_date', 'payment_due_date TEXT'],
+  ['carrier', 'carrier TEXT'],
+  ['vessel', 'vessel TEXT'],
+  ['container_number', 'container_number TEXT'],
+  ['booking_number', 'booking_number TEXT'],
+  ['actual_departure', 'actual_departure TEXT'],
+  ['actual_arrival', 'actual_arrival TEXT']
 ];
+
+const NOTIFICATION_COLUMNS = [['author', 'author TEXT']];
 
 // Crea lo que falte sin tocar los datos existentes
 export async function applySchema(client = db) {
   await client.batch(SCHEMA, 'write');
 
-  const { rows } = await client.execute('PRAGMA table_info(shipments)');
-  const existing = rows.map(row => row.name);
+  for (const [table, columns] of [['shipments', SHIPMENT_COLUMNS], ['notifications', NOTIFICATION_COLUMNS]]) {
+    const { rows } = await client.execute(`PRAGMA table_info(${table})`);
+    const existing = rows.map(row => row.name);
 
-  for (const [name, definition] of SHIPMENT_COLUMNS) {
-    if (existing.includes(name)) continue;
-    try {
-      await client.execute(`ALTER TABLE shipments ADD COLUMN ${definition}`);
-    } catch (error) {
-      // Otra instancia serverless pudo haberla agregado al mismo tiempo
-      if (!error.message.includes('duplicate column')) throw error;
+    for (const [name, definition] of columns) {
+      if (existing.includes(name)) continue;
+      try {
+        await client.execute(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+      } catch (error) {
+        // Otra instancia serverless pudo haberla agregado al mismo tiempo
+        if (!error.message.includes('duplicate column')) throw error;
+      }
     }
   }
 }

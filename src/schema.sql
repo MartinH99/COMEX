@@ -32,6 +32,12 @@ CREATE TABLE IF NOT EXISTS shipments (
   delivery_date TEXT,
   delivered_boxes INTEGER CHECK (delivered_boxes >= 0),
   payment_due_date TEXT,
+  carrier       TEXT,
+  vessel        TEXT,
+  container_number TEXT,
+  booking_number TEXT,
+  actual_departure TEXT,
+  actual_arrival TEXT,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -95,7 +101,29 @@ CREATE TABLE IF NOT EXISTS notifications (
   message       TEXT NOT NULL,
   is_read       INTEGER NOT NULL DEFAULT 0,
   dedupe_key    TEXT UNIQUE,
+  author        TEXT,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Qué notificaciones leyó cada usuario
+CREATE TABLE IF NOT EXISTS notification_reads (
+  user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  notification_id INTEGER NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, notification_id)
+);
+
+-- Documentos de cada embarque: el archivo está en el almacenamiento, acá sus datos
+CREATE TABLE IF NOT EXISTS shipment_documents (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  shipment_id  INTEGER NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
+  category     TEXT NOT NULL,
+  file_name    TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  size_bytes   INTEGER NOT NULL,
+  storage_key  TEXT NOT NULL UNIQUE,
+  visible_to_client INTEGER NOT NULL DEFAULT 1,
+  uploaded_by  TEXT,
+  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Tabla de Prospectos: presupuestos iniciales de posibles ventas

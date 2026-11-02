@@ -222,6 +222,15 @@ export default function AdminApp({ user, onLogout }) {
     setTab('new-shipment');
   };
 
+  const handleCreateAdmin = async (data) => {
+    const created = await sendJson('/api/users', 'POST', data);
+    if (created) {
+      setUsers(prev => [created, ...prev]);
+      showToast(`Administrador ${created.username} creado`, 'ok');
+    }
+    return created;
+  };
+
   const handleUpdateUser = async (id, changes) => {
     const updated = await sendJson(`/api/users/${id}`, 'PATCH', changes);
     if (updated) {
@@ -457,6 +466,11 @@ export default function AdminApp({ user, onLogout }) {
               setTab('new-shipment');
             }}
             onRegisterDelivery={handleRegisterDelivery}
+            onLogisticsSaved={updated => {
+              setShipments(prev => prev.map(s => (s.id === updated.id ? { ...s, ...updated } : s)));
+              showToast(`Datos logísticos de ${updated.code} guardados`, 'ok');
+              refreshNotifications();
+            }}
             onFinanceChanged={(id, totals) => {
               setShipments(prev => prev.map(s => (s.id === id ? { ...s, ...totals } : s)));
               refreshNotifications();
@@ -478,7 +492,7 @@ export default function AdminApp({ user, onLogout }) {
         )}
         {tab === 'calibers' && <CaliberList />}
         {tab === 'users' && (
-          <UserList users={users} clients={clients} currentUserId={user.id} onUpdate={handleUpdateUser} />
+          <UserList users={users} clients={clients} currentUserId={user.id} onUpdate={handleUpdateUser} onCreateAdmin={handleCreateAdmin} />
         )}
       </main>
 

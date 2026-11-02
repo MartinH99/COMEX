@@ -16,7 +16,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const local = createClient({ url: pathToFileURL(path.join(__dirname, '..', 'server', 'comex.db')).href });
 
 // Orden respetando claves foráneas
-const TABLES = ['clients', 'products', 'shipments', 'shipment_calibers', 'notifications', 'prospectos', 'shipment_counters', 'shipment_costs', 'shipment_payments'];
+const TABLES = ['clients', 'products', 'shipments', 'shipment_calibers', 'notifications', 'prospectos', 'shipment_counters', 'shipment_costs', 'shipment_payments', 'shipment_documents'];
 const force = process.argv.includes('--force');
 
 await applySchema(remote);

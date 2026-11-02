@@ -62,8 +62,47 @@ function ResetPasswordModal({ user, onSave, onClose }) {
   );
 }
 
-export function UserList({ users, clients, currentUserId, onUpdate }) {
+function NewAdminModal({ onCreate, onClose }) {
+  const [form, setForm] = useState({ fullName: '', username: '', password: '' });
+  const [saving, setSaving] = useState(false);
+  const update = (field) => (e) => setForm({ ...form, [field]: e.target.value });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    const created = await onCreate(form);
+    setSaving(false);
+    if (created) onClose();
+  };
+
+  return (
+    <Modal title="Nuevo administrador" onClose={onClose}>
+      <form onSubmit={handleSubmit}>
+        <p>Tiene acceso completo. Pasale la contraseña por un medio seguro y pedile que la cambie al entrar.</p>
+        <div className="modal-field">
+          <label htmlFor="adminName">Nombre y apellido</label>
+          <input id="adminName" type="text" autoFocus value={form.fullName} onChange={update('fullName')} required />
+        </div>
+        <div className="modal-field">
+          <label htmlFor="adminUsername">Usuario</label>
+          <input id="adminUsername" type="text" autoCapitalize="none" autoComplete="off" pattern="[A-Za-z0-9._@\-]{3,60}" title="Entre 3 y 60 caracteres, sin espacios" value={form.username} onChange={update('username')} required />
+        </div>
+        <div className="modal-field">
+          <label htmlFor="adminPassword">Contraseña inicial (mínimo 8 caracteres)</label>
+          <input id="adminPassword" type="password" autoComplete="new-password" minLength={8} value={form.password} onChange={update('password')} required />
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-subtle" onClick={onClose}>Cancelar</button>
+          <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Creando…' : 'Crear administrador'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+export function UserList({ users, clients, currentUserId, onUpdate, onCreateAdmin }) {
   const [resetUser, setResetUser] = useState(null);
+  const [showNewAdmin, setShowNewAdmin] = useState(false);
   const pending = users.filter(u => u.status === 'pending').length;
 
   return (
@@ -71,6 +110,9 @@ export function UserList({ users, clients, currentUserId, onUpdate }) {
       <div className="page-header">
         <h1>Usuarios</h1>
         {pending > 0 && <span className="badge pend">{pending} {pending === 1 ? 'pendiente' : 'pendientes'} de aprobación</span>}
+        <div className="right">
+          <button className="btn btn-primary" onClick={() => setShowNewAdmin(true)}>+ Nuevo administrador</button>
+        </div>
       </div>
 
       <div className="section">
@@ -123,6 +165,7 @@ export function UserList({ users, clients, currentUserId, onUpdate }) {
         </div>
       </div>
 
+      {showNewAdmin && <NewAdminModal onCreate={onCreateAdmin} onClose={() => setShowNewAdmin(false)} />}
       {resetUser && <ResetPasswordModal user={resetUser} onSave={onUpdate} onClose={() => setResetUser(null)} />}
     </section>
   );

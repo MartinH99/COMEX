@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Pagination, usePagination } from './Pagination';
 import { ConfirmModal } from './ui';
 
 const EMPTY_CLIENT = { company: '', country: '', contact: '', rating: 5, defaultPayment: '' };
@@ -10,6 +11,7 @@ export function ClientList({ clients, onCreate, onUpdate, onDelete }) {
   const [form, setForm] = useState(EMPTY_CLIENT);
   const [clientToDelete, setClientToDelete] = useState(null);
 
+  const { pageItems, page, totalPages, setPage } = usePagination(clients, 'clientes');
   const isEditing = editing && editing !== 'new';
   const update = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
@@ -108,7 +110,7 @@ export function ClientList({ clients, onCreate, onUpdate, onDelete }) {
               </tr>
             </thead>
             <tbody>
-              {clients.map(c => (
+              {pageItems.map(c => (
                 <tr key={c.id}>
                   <td className="strong">{c.company}</td>
                   <td data-label="País">{c.country}</td>
@@ -142,6 +144,8 @@ export function ClientList({ clients, onCreate, onUpdate, onDelete }) {
           </table>
         </div>
       </div>
+
+      <Pagination page={page} totalPages={totalPages} setPage={setPage} />
 
       {clientToDelete && (
         <ConfirmModal

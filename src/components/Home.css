@@ -31,15 +31,35 @@
    
   /* HERO */
   .home-hero {
-    background:
-      linear-gradient(135deg, rgba(27, 94, 32, 0.92), rgba(46, 125, 50, 0.85)),
-      radial-gradient(circle at 80% 20%, var(--home-kiwi), transparent 60%);
+    position: relative;
+    overflow: hidden;
+    background: var(--home-green-dark);
     color: #fff;
-    padding: 6rem 2rem;
+    padding: 7rem 2rem;
     text-align: center;
+  }
+
+  /* La foto va en su propia capa para poder moverla apenas sin mover el texto */
+  .home-hero-photo {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(180deg, rgba(30, 51, 37, 0.78), rgba(30, 51, 37, 0.86)),
+      url('/landing/huerto.webp') center 40% / cover no-repeat;
+    animation: home-hero-drift 28s ease-in-out infinite alternate;
+  }
+
+  @keyframes home-hero-drift {
+    from { transform: scale(1); }
+    to { transform: scale(1.06); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .home-hero-photo { animation: none; }
   }
    
   .home-hero-content {
+    position: relative;
     max-width: 800px;
     margin: 0 auto;
   }
@@ -152,6 +172,30 @@
   .home-section-alt {
     background: var(--home-green-light);
   }
+
+  /* Fotos muy veladas: el fondo acompaña y el texto se lee como sobre un color liso */
+  .home-section-photo {
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+  }
+
+  .home-photo-orchard {
+    background-image:
+      linear-gradient(rgba(238, 245, 217, 0.9), rgba(238, 245, 217, 0.93)),
+      url('/landing/huerto-claro.webp');
+  }
+
+  .home-photo-ship {
+    background-image:
+      linear-gradient(rgba(245, 243, 236, 0.88), rgba(245, 243, 236, 0.93)),
+      url('/landing/carga.webp');
+    background-position: center bottom;
+  }
+
+  .home-photo-ship p {
+    color: #4b5563;
+  }
    
   .home-about {
     display: grid;
@@ -161,7 +205,9 @@
   }
    
   .home-about-card {
-    background: var(--home-green);
+    background:
+      linear-gradient(rgba(30, 51, 37, 0.82), rgba(30, 51, 37, 0.88)),
+      url('/landing/huerto-claro.webp') center / cover no-repeat;
     color: #fff;
     padding: 2.5rem;
     border-radius: 12px;
@@ -250,8 +296,19 @@
     font-weight: 500;
   }
    
+  .home-credits {
+    display: block;
+    margin-top: 0.4rem;
+    font-size: 0.75rem;
+    opacity: 0.85;
+  }
+
+  .home-credits a {
+    color: inherit;
+  }
+
   .home-footer {
-    background: #0f3d13;
+    background: #16261b;
     color: rgba(255, 255, 255, 0.7);
     text-align: center;
     padding: 1.25rem;

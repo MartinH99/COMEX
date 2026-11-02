@@ -41,6 +41,7 @@ export default function Home({ setTab, homeTab = 'dashboard' }) {
     <div className="home">
       {/* HERO */}
       <section className="home-hero">
+        <div className="home-hero-photo" aria-hidden="true" />
         <div className="home-hero-content">
           <span className="home-badge">🥝 Cooperativa Agrícola</span>
           <h1>Del campo al mundo, kiwi de calidad exportación</h1>
@@ -85,7 +86,7 @@ export default function Home({ setTab, homeTab = 'dashboard' }) {
       </section>
  
       {/* QUÉ HACEMOS */}
-      <section className="home-section home-section-alt">
+      <section className="home-section home-section-photo home-photo-orchard">
         <h2 className="home-center">Qué hacemos</h2>
         <div className="home-grid">
           {features.map(f => (
@@ -112,7 +113,7 @@ export default function Home({ setTab, homeTab = 'dashboard' }) {
       </section>
  
       {/* PROCESO */}
-      <section className="home-section home-section-alt">
+      <section className="home-section home-section-photo home-photo-ship">
         <h2 className="home-center">Nuestro proceso</h2>
         <div className="home-grid">
           {steps.map(s => (
@@ -127,6 +128,11 @@ export default function Home({ setTab, homeTab = 'dashboard' }) {
  
       <footer className="home-footer">
         © {new Date().getFullYear()} Cooperativa de Productores de Kiwi. Todos los derechos reservados.
+        <span className="home-credits">
+          Fotos: huerto de kiwi, Pseudopanax (dominio público), vía Wikimedia Commons; carga marítima, recorte de{' '}
+          <a href="https://commons.wikimedia.org/wiki/File:Container_ship_being_towed_in_the_Scheldt_towards_the_Port_of_Antwerp,_seen_from_Doel,_Belgium_(DSCF3880).jpg" target="_blank" rel="noreferrer">foto de Trougnouf</a>,{' '}
+          <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>.
+        </span>
       </footer>
     </div>
   );
