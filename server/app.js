@@ -295,7 +295,8 @@ const SELECT_SHIPMENT = `
     s.fruit_type AS fruitType, s.category, s.currency, s.load_week AS loadWeek,
     s.eta_week AS etaWeek, s.transport, s.port, s.payment_terms AS paymentTerms,
     s.variance, s.boxes, s.total_usd AS totalUsd, s.status, s.created_at AS createdAt,
-    s.delivery_date AS deliveryDate, s.delivered_boxes AS deliveredBoxes
+    s.delivery_date AS deliveryDate, s.delivered_boxes AS deliveredBoxes,
+    s.payment_due_date AS paymentDueDate
   FROM shipments s
 `;
 
@@ -350,6 +351,18 @@ const reminderStatements = () => {
         WHERE status <> 'Entregado' AND delivery_date BETWEEN ? AND ?
       `,
       args: [localDate(), localDate(REMINDER_DAYS)]
+    },
+    {
+      sql: `
+        INSERT OR IGNORE INTO notifications (shipment_id, shipment_code, type, message, dedupe_key)
+        SELECT id, code, 'payment-overdue',
+          'El pago venció el ' || substr(payment_due_date, 9, 2) || '/' || substr(payment_due_date, 6, 2) || '/' || substr(payment_due_date, 1, 4),
+          'payment-overdue:' || id || ':' || payment_due_date
+        FROM shipments s
+        WHERE payment_due_date IS NOT NULL AND payment_due_date < ?
+          AND s.total_usd - COALESCE((SELECT SUM(amount_usd) FROM shipment_payments p WHERE p.shipment_id = s.id), 0) > 0.005
+      `,
+      args: [localDate()]
     }
   ];
 };
@@ -510,9 +523,13 @@ app.get('/api/shipments', async (req, res) => {
       calibresByShipment[c.shipmentId][c.code] = { boxes: c.boxes, priceKg: c.priceKg };
     });
 
+    // Costos y cobros son información interna: un cliente nunca los recibe
+    const finance = isClient(req) ? {} : await loadFinanceTotals();
+
     const result = shipmentsRes.rows.map(shipment => ({
       ...plain(shipment),
-      calibres: calibresByShipment[shipment.id] || {}
+      calibres: calibresByShipment[shipment.id] || {},
+      ...(isClient(req) ? {} : (finance[shipment.id] || { costsUsd: 0, paidUsd: 0 }))
     }));
 
     res.json(result);
@@ -525,7 +542,7 @@ app.get('/api/shipments', async (req, res) => {
 app.post('/api/shipments', async (req, res) => {
   const {
     clientId, condition, deal, product, fruitType, category, loadWeek,
-    etaWeek, transport, port, paymentTerms, variance, boxes, calibres, totalUsd, deliveryDate, prospectId
+    etaWeek, transport, port, paymentTerms, variance, boxes, calibres, totalUsd, deliveryDate, paymentDueDate, prospectId
   } = req.body;
 
   if (!clientId || !port || !boxes || boxes <= 0) {
@@ -552,7 +569,7 @@ app.post('/api/shipments', async (req, res) => {
         generatedCode, clientId, condition, deal, product || 'Kiwi',
         fruitType || 'Convencional', category || 'Cat 1', 'USD', loadWeek,
         etaWeek || `Semana ${parseInt(loadWeek) + 2}`, transport || 'Marítimo', port,
-        paymentTerms, variance ?? 2.0, boxes, totalUsd, 'Programado', deliveryDate || null
+        paymentTerms, variance ?? 2.0, boxes, totalUsd, 'Programado', deliveryDate || null, paymentDueDate || null
       ]
     }];
 
@@ -594,11 +611,157 @@ app.post('/api/shipments', async (req, res) => {
   }
 });
 
+const toCents = (value) => Math.round(Number(value) * 100) / 100;
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+async function loadFinanceTotals() {
+  const [costs, payments] = await db.batch([
+    'SELECT shipment_id AS id, SUM(amount_usd) AS total FROM shipment_costs GROUP BY shipment_id',
+    'SELECT shipment_id AS id, SUM(amount_usd) AS total FROM shipment_payments GROUP BY shipment_id'
+  ], 'read');
+  const totals = {};
+  const add = (rows, field) => rows.forEach(row => {
+    totals[row.id] ??= { costsUsd: 0, paidUsd: 0 };
+    totals[row.id][field] = toCents(row.total);
+  });
+  add(costs.rows, 'costsUsd');
+  add(payments.rows, 'paidUsd');
+  return totals;
+}
+
+// Detalle de costos y cobros de un embarque, con sus totales
+async function loadShipmentFinance(id) {
+  const [costs, payments] = await db.batch([
+    { sql: 'SELECT id, category, description, amount_usd AS amountUsd, created_at AS createdAt FROM shipment_costs WHERE shipment_id = ? ORDER BY id DESC', args: [id] },
+    { sql: 'SELECT id, amount_usd AS amountUsd, paid_at AS paidAt, note, created_at AS createdAt FROM shipment_payments WHERE shipment_id = ? ORDER BY paid_at DESC, id DESC', args: [id] }
+  ], 'read');
+  const sum = (rows) => toCents(rows.reduce((total, row) => total + row.amountUsd, 0));
+  return {
+    costs: costs.rows.map(plain),
+    payments: payments.rows.map(plain),
+    costsUsd: sum(costs.rows),
+    paidUsd: sum(payments.rows)
+  };
+}
+
+const findShipment = async (id) => (await db.execute({ sql: 'SELECT total_usd FROM shipments WHERE id = ?', args: [id] })).rows[0];
+
+// GET /api/shipments/:id/finance
+app.get('/api/shipments/:id/finance', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!(await findShipment(id))) return res.status(404).json({ error: 'Embarque no encontrado.' });
+    res.json(await loadShipmentFinance(id));
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener costos y cobros: ' + error.message });
+  }
+});
+
+// POST /api/shipments/:id/costs
+app.post('/api/shipments/:id/costs', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const category = (req.body.category || '').trim();
+    const description = (req.body.description || '').trim();
+    const amountUsd = toCents(req.body.amountUsd);
+
+    if (!category || category.length > 80 || description.length > 300) {
+      return res.status(400).json({ error: 'Indicá un concepto válido.' });
+    }
+    if (!(amountUsd > 0 && amountUsd <= 1e10)) {
+      return res.status(400).json({ error: 'El importe debe ser mayor a 0.' });
+    }
+    if (!(await findShipment(id))) return res.status(404).json({ error: 'Embarque no encontrado.' });
+
+    await db.execute({
+      sql: 'INSERT INTO shipment_costs (shipment_id, category, description, amount_usd) VALUES (?, ?, ?, ?)',
+      args: [id, category, description || null, amountUsd]
+    });
+    res.status(201).json(await loadShipmentFinance(id));
+  } catch (error) {
+    res.status(500).json({ error: 'Error al guardar el costo: ' + error.message });
+  }
+});
+
+// DELETE /api/shipments/:id/costs/:costId
+app.delete('/api/shipments/:id/costs/:costId', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const result = await db.execute({
+      sql: 'DELETE FROM shipment_costs WHERE id = ? AND shipment_id = ?',
+      args: [Number(req.params.costId), id]
+    });
+    if (result.rowsAffected === 0) return res.status(404).json({ error: 'Costo no encontrado.' });
+    res.json(await loadShipmentFinance(id));
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar el costo: ' + error.message });
+  }
+});
+
+// POST /api/shipments/:id/payments
+app.post('/api/shipments/:id/payments', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const amountUsd = toCents(req.body.amountUsd);
+    const paidAt = req.body.paidAt;
+    const note = (req.body.note || '').trim();
+
+    if (!(amountUsd > 0 && amountUsd <= 1e10)) {
+      return res.status(400).json({ error: 'El importe debe ser mayor a 0.' });
+    }
+    if (typeof paidAt !== 'string' || !DATE_PATTERN.test(paidAt)) {
+      return res.status(400).json({ error: 'Indicá la fecha del cobro.' });
+    }
+    if (note.length > 300) return res.status(400).json({ error: 'La nota es demasiado larga.' });
+
+    const shipment = await findShipment(id);
+    if (!shipment) return res.status(404).json({ error: 'Embarque no encontrado.' });
+
+    const { paidUsd } = await loadShipmentFinance(id);
+    const balance = toCents(shipment.total_usd - paidUsd);
+    if (amountUsd > balance) {
+      return res.status(400).json({ error: `El cobro supera el saldo pendiente de USD ${balance.toFixed(2)}.` });
+    }
+
+    await db.batch([
+      { sql: 'INSERT INTO shipment_payments (shipment_id, amount_usd, paid_at, note) VALUES (?, ?, ?, ?)', args: [id, amountUsd, paidAt, note || null] },
+      notifyFromShipment(id, 'payment', "'Cobro registrado: USD ' || printf('%.2f', ?)", [amountUsd])
+    ], 'write');
+    res.status(201).json(await loadShipmentFinance(id));
+  } catch (error) {
+    res.status(500).json({ error: 'Error al registrar el cobro: ' + error.message });
+  }
+});
+
+// DELETE /api/shipments/:id/payments/:paymentId
+app.delete('/api/shipments/:id/payments/:paymentId', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const paymentId = Number(req.params.paymentId);
+    const [, result] = await db.batch([
+      {
+        sql: `
+          INSERT INTO notifications (shipment_id, shipment_code, type, message)
+          SELECT s.id, s.code, 'payment', 'Se anuló un cobro de USD ' || printf('%.2f', p.amount_usd)
+          FROM shipment_payments p JOIN shipments s ON s.id = p.shipment_id
+          WHERE p.id = ? AND p.shipment_id = ?
+        `,
+        args: [paymentId, id]
+      },
+      { sql: 'DELETE FROM shipment_payments WHERE id = ? AND shipment_id = ?', args: [paymentId, id] }
+    ], 'write');
+    if (result.rowsAffected === 0) return res.status(404).json({ error: 'Cobro no encontrado.' });
+    res.json(await loadShipmentFinance(id));
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar el cobro: ' + error.message });
+  }
+});
+
 // PUT /api/shipments/:id: corrige los datos sin tocar código, estado ni entrega registrada
 app.put('/api/shipments/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const { clientId, condition, deal, product, deliveryDate, transport, paymentTerms, variance, calibres } = req.body;
+    const { clientId, condition, deal, product, deliveryDate, paymentDueDate, transport, paymentTerms, variance, calibres } = req.body;
     const port = (req.body.port || '').trim();
     const loadWeek = Number(req.body.loadWeek);
 
@@ -644,12 +807,12 @@ app.put('/api/shipments/:id', async (req, res) => {
       {
         sql: `
           UPDATE shipments SET
-            client_id = ?, condition = ?, deal = ?, product = ?, delivery_date = ?, transport = ?, port = ?,
+            client_id = ?, condition = ?, deal = ?, product = ?, delivery_date = ?, payment_due_date = ?, transport = ?, port = ?,
             payment_terms = ?, variance = ?, load_week = ?, boxes = ?, total_usd = ?
           WHERE id = ?
         `,
         args: [
-          clientId, condition, deal, product?.trim() || 'Kiwi', deliveryDate || null, transport || 'Marítimo', port,
+          clientId, condition, deal, product?.trim() || 'Kiwi', deliveryDate || null, paymentDueDate || null, transport || 'Marítimo', port,
           paymentTerms.trim(), variance ?? 2.0, loadWeek, boxes, totalUsd, id
         ]
       },
@@ -782,8 +945,8 @@ app.get('/api/notifications', async (req, res) => {
     ], 'write');
 
     res.json({
-      items: results[2].rows.map(plain),
-      unread: Number(results[3].rows[0].count)
+      items: results[results.length - 2].rows.map(plain),
+      unread: Number(results[results.length - 1].rows[0].count)
     });
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener notificaciones: ' + error.message });
@@ -1032,8 +1195,10 @@ app.delete('/api/shipments/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
     // Borrado explícito de calibres: no dependemos de PRAGMA foreign_keys en la conexión remota
-    const [, , , , result] = await db.batch([
+    const results = await db.batch([
       notifyFromShipment(id, 'deleted', "'Embarque eliminado'"),
+      { sql: 'DELETE FROM shipment_costs WHERE shipment_id = ?', args: [id] },
+      { sql: 'DELETE FROM shipment_payments WHERE shipment_id = ?', args: [id] },
       // Las notificaciones sobreviven al embarque, pero ya no apuntan a él
       { sql: 'UPDATE notifications SET shipment_id = NULL WHERE shipment_id = ?', args: [id] },
       // El prospecto que lo originó vuelve a estar abierto
@@ -1042,7 +1207,7 @@ app.delete('/api/shipments/:id', async (req, res) => {
       { sql: 'DELETE FROM shipments WHERE id = ?', args: [id] }
     ], 'write');
 
-    if (result.rowsAffected === 0) {
+    if (results[results.length - 1].rowsAffected === 0) {
       return res.status(404).json({ error: 'Embarque no encontrado.' });
     }
 

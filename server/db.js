@@ -51,8 +51,27 @@ const SCHEMA = [
     status        TEXT DEFAULT 'Programado',
     delivery_date TEXT,
     delivered_boxes INTEGER CHECK (delivered_boxes >= 0),
+    payment_due_date TEXT,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS shipment_costs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    shipment_id INTEGER NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
+    category    TEXT NOT NULL,
+    description TEXT,
+    amount_usd  REAL NOT NULL CHECK (amount_usd > 0),
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS shipment_payments (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    shipment_id INTEGER NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
+    amount_usd  REAL NOT NULL CHECK (amount_usd > 0),
+    paid_at     TEXT NOT NULL,
+    note        TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_costs_shipment ON shipment_costs(shipment_id)',
+  'CREATE INDEX IF NOT EXISTS idx_payments_shipment ON shipment_payments(shipment_id)',
   `CREATE TABLE IF NOT EXISTS shipment_calibers (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     shipment_id  INTEGER NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
@@ -136,7 +155,8 @@ const SCHEMA = [
 // Columnas agregadas después de crear la tabla: CREATE TABLE IF NOT EXISTS no las suma a una base existente
 const SHIPMENT_COLUMNS = [
   ['delivery_date', 'delivery_date TEXT'],
-  ['delivered_boxes', 'delivered_boxes INTEGER CHECK (delivered_boxes >= 0)']
+  ['delivered_boxes', 'delivered_boxes INTEGER CHECK (delivered_boxes >= 0)'],
+  ['payment_due_date', 'payment_due_date TEXT']
 ];
 
 // Crea lo que falte sin tocar los datos existentes
@@ -158,8 +178,8 @@ export async function applySchema(client = db) {
 }
 
 const INSERT_SHIPMENT = `
-  INSERT INTO shipments (code, client_id, condition, deal, product, fruit_type, category, currency, load_week, eta_week, transport, port, payment_terms, variance, boxes, total_usd, status, delivery_date)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO shipments (code, client_id, condition, deal, product, fruit_type, category, currency, load_week, eta_week, transport, port, payment_terms, variance, boxes, total_usd, status, delivery_date, payment_due_date)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
 async function seed() {
@@ -185,7 +205,7 @@ async function seed() {
         code, 1, 'Venta', 'Precio Cerrado', 'Kiwi Hayward Green',
         'Convencional', 'Cat 1', 'USD', 18, 'Semana 20 (ETA Mayo 15)',
         'Marítimo', 'Puerto de Rotterdam', '50/50; 15 días llegada fruta',
-        2.0, 2288, 49446.00, 'En Tránsito', null
+        2.0, 2288, 49446.00, 'En Tránsito', null, null
       ]
     },
     { sql: insertCaliber, args: [code, 'C27', 500, 2.40] },

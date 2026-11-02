@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { apiFetch } from './api';
 import { ADMIN_NAV, Sidebar } from './components/Sidebar';
 import { UserList } from './components/UserList';
+import { Collections } from './components/Collections';
 import { NotificationCenter } from './components/NotificationCenter';
 import { Dashboard } from './components/Dashboard';
 import { ShipmentForm } from './components/ShipmentForm';
@@ -126,7 +127,7 @@ export default function AdminApp({ user, onLogout }) {
   const handleUpdateShipment = async (shipmentData) => {
     const updated = await sendJson(`/api/shipments/${editingShipment.id}`, 'PUT', shipmentData);
     if (updated) {
-      setShipments(prev => prev.map(s => (s.id === updated.id ? updated : s)));
+      setShipments(prev => prev.map(s => (s.id === updated.id ? { ...s, ...updated } : s)));
       setFocus(prev => ({ key: prev.key + 1, shipmentId: updated.id }));
       setEditingShipment(null);
       setTab('shipments');
@@ -339,6 +340,11 @@ export default function AdminApp({ user, onLogout }) {
     }
   };
 
+  const openShipment = (shipmentId) => {
+    setFocus(prev => ({ key: prev.key + 1, shipmentId }));
+    setTab('shipments');
+  };
+
   const openBlankShipmentForm = () => {
     setShipmentDraft(null);
     setEditingShipment(null);
@@ -380,6 +386,8 @@ export default function AdminApp({ user, onLogout }) {
             clients={clients}
             onNew={openBlankShipmentForm}
             onViewAll={() => setTab('shipments')}
+            onViewCollections={() => setTab('collections')}
+            onOpenShipment={openShipment}
           />
         )}
         {tab === 'prospects' && (
@@ -437,6 +445,7 @@ export default function AdminApp({ user, onLogout }) {
               setTab('new-shipment');
             }}
             onRegisterDelivery={handleRegisterDelivery}
+            onFinanceChanged={(id, totals) => setShipments(prev => prev.map(s => (s.id === id ? { ...s, ...totals } : s)))}
             onChangeStatus={handleChangeStatus}
             onAddFollowUp={handleAddFollowUp}
           />
@@ -448,6 +457,9 @@ export default function AdminApp({ user, onLogout }) {
             onUpdate={handleEditClient}
             onDelete={handleDeleteClient}
           />
+        )}
+        {tab === 'collections' && (
+          <Collections shipments={shipments} clients={clients} onOpenShipment={openShipment} />
         )}
         {tab === 'calibers' && <CaliberList />}
         {tab === 'users' && (

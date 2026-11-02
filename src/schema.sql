@@ -31,7 +31,28 @@ CREATE TABLE IF NOT EXISTS shipments (
   status        TEXT DEFAULT 'Programado',
   delivery_date TEXT,
   delivered_boxes INTEGER CHECK (delivered_boxes >= 0),
+  payment_due_date TEXT,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Costos de cada embarque
+CREATE TABLE IF NOT EXISTS shipment_costs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  shipment_id INTEGER NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
+  category    TEXT NOT NULL,
+  description TEXT,
+  amount_usd  REAL NOT NULL CHECK (amount_usd > 0),
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Cobros de cada embarque
+CREATE TABLE IF NOT EXISTS shipment_payments (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  shipment_id INTEGER NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
+  amount_usd  REAL NOT NULL CHECK (amount_usd > 0),
+  paid_at     TEXT NOT NULL,
+  note        TEXT,
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Último número de embarque usado por año

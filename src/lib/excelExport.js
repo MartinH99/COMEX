@@ -1,3 +1,5 @@
+import { getFinance } from './finance.js';
+
 const header = (titles) => titles.map(value => ({ value, fontWeight: 'bold', backgroundColor: '#EEF5D9' }));
 const text = (value) => ({ type: String, value: value ?? '' });
 const int = (value) => (value === null || value === undefined ? null : { type: Number, value, format: '#,##0' });
@@ -6,19 +8,25 @@ const usd = (value) => ({ type: Number, value: value || 0, format: '#,##0.00' })
 // Se guarda como fecha real para que Excel pueda ordenarla y filtrarla
 const date = (value) => (value ? { type: Date, value: new Date(`${value}T00:00:00Z`), format: 'dd/mm/yyyy' } : null);
 
-export function buildShipmentSheets(shipments, clients) {
+export function buildShipmentSheets(shipments, clients, { includeFinance = false } = {}) {
   const clientOf = (shipment) => clients.find(c => c.id === shipment.clientId);
 
   const main = [
-    header(['Código', 'Cliente', 'País', 'Producto', 'Condición', 'Modalidad', 'Semana de salida', 'Entrega estimada', 'Puerto', 'Transporte', 'Estado', 'Cajas', 'Cajas entregadas', 'Diferencia de cajas', 'Tolerancia %', 'Total USD', 'Condición de pago']),
+    header(['Código', 'Cliente', 'País', 'Producto', 'Condición', 'Modalidad', 'Semana de salida', 'Entrega estimada', 'Puerto', 'Transporte', 'Estado', 'Cajas', 'Cajas entregadas', 'Diferencia de cajas', 'Tolerancia %', 'Total USD', 'Condición de pago', ...(includeFinance ? ['Vencimiento del pago', 'Costos USD', 'Margen USD', 'Margen %', 'Cobrado USD', 'Saldo USD', 'Estado de cobro'] : [])]),
     ...shipments.map(s => {
       const client = clientOf(s);
       const delivered = s.deliveredBoxes ?? null;
+      const finance = includeFinance ? getFinance(s) : null;
       return [
         text(s.code), text(client?.company), text(client?.country), text(s.product), text(s.condition), text(s.deal),
         int(s.loadWeek), date(s.deliveryDate), text(s.port), text(s.transport), text(s.status),
         int(s.boxes), int(delivered), int(delivered === null ? null : delivered - s.boxes),
-        { type: Number, value: s.variance ?? 0 }, usd(s.totalUsd), text(s.paymentTerms)
+        { type: Number, value: s.variance ?? 0 }, usd(s.totalUsd), text(s.paymentTerms),
+        ...(finance ? [
+          date(s.paymentDueDate), usd(finance.costs), usd(finance.margin),
+          { type: Number, value: Math.round(finance.marginPercent * 10) / 10, format: '0.0' },
+          usd(finance.paid), usd(finance.balance), text(finance.paymentStatus)
+        ] : [])
       ];
     })
   ];
@@ -33,7 +41,7 @@ export function buildShipmentSheets(shipments, clients) {
   ];
 
   return [
-    { data: main, sheet: 'Embarques', stickyRowsCount: 1, columns: [18, 28, 14, 20, 12, 18, 10, 12, 18, 12, 13, 9, 11, 11, 10, 13, 30].map(width => ({ width })) },
+    { data: main, sheet: 'Embarques', stickyRowsCount: 1, columns: [18, 28, 14, 20, 12, 18, 10, 12, 18, 12, 13, 9, 11, 11, 10, 13, 30, ...(includeFinance ? [12, 12, 12, 9, 12, 12, 13] : [])].map(width => ({ width })) },
     { data: calibers, sheet: 'Calibres', stickyRowsCount: 1, columns: [18, 28, 9, 9, 10, 13].map(width => ({ width })) }
   ];
 }

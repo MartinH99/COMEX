@@ -8,6 +8,7 @@ const ICONS = {
   shipments: ['M2 20h20', 'M4 20l-1-6h18l-2 6', 'M6 14V8h12v6', 'M12 8V3'],
   clients: ['M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z', 'M22 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'],
   calibers: ['M3 3h7v7H3z', 'M14 3h7v7h-7z', 'M14 14h7v7h-7z', 'M3 14h7v7H3z'],
+  collections: ['M12 2v20', 'M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'],
   users: ['M12 15a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z', 'M5 21a7 7 0 0 1 14 0', 'M12 2v2']
 };
 
@@ -15,6 +16,7 @@ export const ADMIN_NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: ICONS.dashboard },
   { id: 'prospects', label: 'Prospectos', icon: ICONS.prospects },
   { id: 'shipments', label: 'Embarques', icon: ICONS.shipments },
+  { id: 'collections', label: 'Cobros', icon: ICONS.collections },
   { id: 'clients', label: 'Clientes', icon: ICONS.clients },
   { id: 'calibers', label: 'Calibres', icon: ICONS.calibers },
   { id: 'users', label: 'Usuarios', icon: ICONS.users }

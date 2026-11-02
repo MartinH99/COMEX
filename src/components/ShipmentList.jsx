@@ -3,6 +3,7 @@ import { apiFetch } from '../api';
 import { buildShipmentSheets, downloadExcel } from '../lib/excelExport';
 import { ListFilters, matchesDateRange, matchesSearch } from './ListFilters';
 import { NOTIFICATION_TYPES } from './NotificationCenter';
+import { ShipmentFinance } from './ShipmentFinance';
 import { Modal, StatusBadge, formatDate, formatDateTime, formatUsd } from './ui';
 
 const SHIPMENT_STATUSES = ['Programado', 'En Tránsito', 'Entregado'];
@@ -157,6 +158,7 @@ function CaliberDetail({ shipment, readOnly, onEdit, onRegisterDelivery }) {
         <span>Transporte: {shipment.transport}</span>
         <span>Pallets: {(shipment.boxes / BOXES_PER_PALLET).toFixed(1)}</span>
         <span>Pago: {shipment.paymentTerms}</span>
+        {shipment.paymentDueDate && <span>Vence el pago: {formatDate(shipment.paymentDueDate)}</span>}
         <span>Tolerancia: ±{shipment.variance}%</span>
         {isRegistered && <span>Entregadas: {shipment.deliveredBoxes.toLocaleString('en-US')} cajas</span>}
       </div>
@@ -196,7 +198,7 @@ function CaliberDetail({ shipment, readOnly, onEdit, onRegisterDelivery }) {
   );
 }
 
-export function ShipmentList({ shipments, clients, readOnly, initialOpenId, activityVersion, onNew, onEdit, onDelete, onRegisterDelivery, onChangeStatus, onAddFollowUp }) {
+export function ShipmentList({ shipments, clients, readOnly, initialOpenId, activityVersion, onNew, onEdit, onDelete, onRegisterDelivery, onChangeStatus, onAddFollowUp, onFinanceChanged }) {
   const [statusFilter, setStatusFilter] = useState('Todos');
   const [openId, setOpenId] = useState(initialOpenId ?? null);
   const [deliveryShipmentId, setDeliveryShipmentId] = useState(null);
@@ -245,7 +247,7 @@ export function ShipmentList({ shipments, clients, readOnly, initialOpenId, acti
         dateLabel="Entrega"
         total={shipments.length}
         shown={visible.length}
-        onExport={() => downloadExcel(buildShipmentSheets(visible, clients), 'Embarques')}
+        onExport={() => downloadExcel(buildShipmentSheets(visible, clients, { includeFinance: !readOnly }), 'Embarques')}
       />
 
       <div className="section">
@@ -317,6 +319,7 @@ export function ShipmentList({ shipments, clients, readOnly, initialOpenId, acti
                                 onAddFollowUp={onAddFollowUp}
                               />
                             </div>
+                            {!readOnly && <ShipmentFinance shipment={s} onChanged={onFinanceChanged} />}
                           </td>
                         </tr>
                       )}

@@ -16,6 +16,7 @@ export function ShipmentForm({ clients, products, draft, isEditing, onSave, onCa
       category: 'Cat 1',
       loadWeek: draft?.loadWeek || 18,
       deliveryDate: draft?.deliveryDate || '',
+      paymentDueDate: draft?.paymentDueDate || '',
       transport: draft?.transport || 'Marítimo',
       port: draft?.port || '',
       paymentTerms: draft?.paymentTerms || client?.defaultPayment || '50/50; 15 días llegada',
@@ -118,6 +119,11 @@ export function ShipmentForm({ clients, products, draft, isEditing, onSave, onCa
           <div>
             <label htmlFor="deliveryDate">Fecha de entrega estimada</label>
             <input id="deliveryDate" type="date" value={formData.deliveryDate} onChange={e => setFormData({...formData, deliveryDate: e.target.value})} required={!isEditing} />
+          </div>
+
+          <div>
+            <label htmlFor="paymentDueDate">Vencimiento del pago (opcional)</label>
+            <input id="paymentDueDate" type="date" value={formData.paymentDueDate} onChange={e => setFormData({...formData, paymentDueDate: e.target.value})} />
           </div>
 
           <div>

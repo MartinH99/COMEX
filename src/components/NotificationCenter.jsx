@@ -8,6 +8,8 @@ export const NOTIFICATION_TYPES = {
   'created': { label: 'Nuevo embarque', badge: 'brand' },
   'updated': { label: 'Datos actualizados', badge: 'gray' },
   'deleted': { label: 'Eliminado', badge: 'alert' },
+  'payment': { label: 'Cobro', badge: 'ok' },
+  'payment-overdue': { label: 'Cobro vencido', badge: 'alert' },
   'due-soon': { label: 'Entrega próxima', badge: 'pend' },
   'overdue': { label: 'Entrega vencida', badge: 'alert' }
 };
