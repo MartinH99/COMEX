@@ -36,6 +36,8 @@ export function useProductSelect({ value, onChange, products, onCreateProduct })
         {products.map(p => (
           <option key={p.id} value={p.name}>{p.name}</option>
         ))}
+        {/* Registros viejos pueden tener un producto que no está en la lista */}
+        {!products.some(p => p.name === value) && <option value={value}>{value}</option>}
         <option value={NEW_PRODUCT}>+ Crear producto…</option>
       </select>
     </div>

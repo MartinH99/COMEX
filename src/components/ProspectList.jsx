@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { buildProspectSheets, downloadExcel } from '../lib/excelExport';
+import { downloadProspectPdf } from '../lib/prospectPdf';
+import { ListFilters, matchesDateRange, matchesSearch } from './ListFilters';
 import { PROSPECT_STATUSES } from './ProspectForm';
 import { formatDate, formatUsd } from './ui';
 
@@ -15,12 +18,32 @@ const isOpen = (prospect) => prospect.status !== 'Perdido' && prospect.status !=
 export function ProspectList({ prospects, readOnly, onNew, onEdit, onDelete, onCreateShipment, onOpenShipment }) {
   const [statusFilter, setStatusFilter] = useState('Todos');
   const [convertingId, setConvertingId] = useState(null);
+  const [filters, setFilters] = useState({ search: '', from: '', to: '' });
+  const [pdfId, setPdfId] = useState(null);
+  const [pdfError, setPdfError] = useState(null);
+
+  const handleDownloadPdf = async (prospect) => {
+    setPdfId(prospect.id);
+    setPdfError(null);
+    try {
+      await downloadProspectPdf(prospect);
+    } catch (err) {
+      console.error('Error al generar el PDF:', err);
+      setPdfError(`No se pudo generar el PDF de ${prospect.company}. Probá de nuevo.`);
+    } finally {
+      setPdfId(null);
+    }
+  };
 
   const today = new Date().toLocaleDateString('en-CA');
-  const filters = readOnly
+  const statusOptions = readOnly
     ? ['Todos', 'Cotizado', 'En negociación', 'Convertido']
     : ['Todos', ...PROSPECT_STATUSES, 'Convertido'];
-  const visible = statusFilter === 'Todos' ? prospects : prospects.filter(p => p.status === statusFilter);
+  const visible = prospects.filter(p => {
+    if (statusFilter !== 'Todos' && p.status !== statusFilter) return false;
+    return matchesSearch(filters.search, [p.company, p.country, p.contact, p.email, p.product, p.port])
+      && matchesDateRange(p.validUntil, filters.from, filters.to);
+  });
 
   const open = prospects.filter(isOpen);
   const openUsd = open.reduce((sum, p) => sum + p.totalUsd, 0);
@@ -68,12 +91,24 @@ export function ProspectList({ prospects, readOnly, onNew, onEdit, onDelete, onC
       </div>
 
       <div className="pills page-filter">
-        {filters.map(status => (
+        {statusOptions.map(status => (
           <button key={status} className={statusFilter === status ? 'active' : ''} onClick={() => setStatusFilter(status)}>
             {status}
           </button>
         ))}
       </div>
+
+      <ListFilters
+        filters={filters}
+        setFilters={setFilters}
+        searchPlaceholder="Empresa, contacto, producto o puerto"
+        dateLabel="Validez"
+        total={prospects.length}
+        shown={visible.length}
+        onExport={() => downloadExcel(buildProspectSheets(visible, { includeNotes: !readOnly }), 'Prospectos')}
+      />
+
+      {pdfError && <div className="action-error" role="alert">{pdfError}</div>}
 
       <div className="section">
         {visible.length === 0 ? (
@@ -117,6 +152,14 @@ export function ProspectList({ prospects, readOnly, onNew, onEdit, onDelete, onC
                       <td data-label="Presupuesto USD" className="num strong">{formatUsd(p.totalUsd)}</td>
                       <td>
                         <div className="row-actions">
+                          <button
+                            className="btn btn-small"
+                            disabled={p.boxes === 0 || pdfId === p.id}
+                            title={p.boxes === 0 ? 'Agregá calibres con cajas para generar el presupuesto' : undefined}
+                            onClick={() => handleDownloadPdf(p)}
+                          >
+                            {pdfId === p.id ? 'Generando…' : 'PDF'}
+                          </button>
                           {p.shipmentId ? (
                             <button className="btn btn-small" onClick={() => onOpenShipment(p.shipmentId)}>Ver embarque</button>
                           ) : !readOnly && (

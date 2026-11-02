@@ -3,7 +3,8 @@ import { CaliberEditor, getCaliberTotals } from './CaliberEditor';
 import { useProductSelect } from './ProductSelect';
 import { formatUsd } from './ui';
 
-export function ShipmentForm({ clients, products, draft, onSave, onCancel, onError, onCreateProduct }) {
+// `draft` precarga el formulario: desde un prospecto, o desde el embarque si isEditing
+export function ShipmentForm({ clients, products, draft, isEditing, onSave, onCancel, onError, onCreateProduct }) {
   const [formData, setFormData] = useState(() => {
     const client = clients.find(c => c.id === draft?.clientId) || clients[0];
     return {
@@ -64,8 +65,9 @@ export function ShipmentForm({ clients, products, draft, onSave, onCancel, onErr
     <>
     <form onSubmit={handleSubmit} style={{ maxWidth: 1000 }}>
       <div className="page-header">
-        <h1>Nuevo embarque</h1>
-        {draft && <span className="badge brand">Desde prospecto: {draft.company}</span>}
+        <h1>{isEditing ? 'Editar embarque' : 'Nuevo embarque'}</h1>
+        {isEditing && <span className="badge brand mono">{draft.code}</span>}
+        {draft?.prospectId && <span className="badge brand">Desde prospecto: {draft.company}</span>}
       </div>
 
       <div className="section">
@@ -115,7 +117,7 @@ export function ShipmentForm({ clients, products, draft, onSave, onCancel, onErr
 
           <div>
             <label htmlFor="deliveryDate">Fecha de entrega estimada</label>
-            <input id="deliveryDate" type="date" value={formData.deliveryDate} onChange={e => setFormData({...formData, deliveryDate: e.target.value})} required />
+            <input id="deliveryDate" type="date" value={formData.deliveryDate} onChange={e => setFormData({...formData, deliveryDate: e.target.value})} required={!isEditing} />
           </div>
 
           <div>
@@ -140,7 +142,7 @@ export function ShipmentForm({ clients, products, draft, onSave, onCancel, onErr
       <div className="form-footer">
         <div className="total">Total: {formatUsd(totalUsd)} USD</div>
         <button type="button" className="btn btn-subtle" onClick={onCancel}>Cancelar</button>
-        <button type="submit" className="btn btn-primary">Guardar embarque</button>
+        <button type="submit" className="btn btn-primary">{isEditing ? 'Guardar cambios' : 'Guardar embarque'}</button>
       </div>
     </form>
     {productSelect.modal}

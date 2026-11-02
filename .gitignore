@@ -29,3 +29,6 @@ dist-ssr
 .vercel
 server/*.db
 server/*.db-*
+
+# Agentes y configuración local de Claude Code
+.claude

@@ -1,12 +1,5 @@
 import './Home.css';
  
-const stats = [
-  { value: '+120', label: 'Productores asociados' },
-  { value: '1.800', label: 'Hectáreas cultivadas' },
-  { value: '+15', label: 'Países de destino' },
-  { value: '35', label: 'Años de trayectoria' },
-];
- 
 const features = [
   {
     icon: '🌱',
@@ -25,8 +18,8 @@ const features = [
   },
   {
     icon: '✅',
-    title: 'Calidad certificada',
-    text: 'Trazabilidad completa del lote y certificaciones internacionales como GlobalG.A.P.',
+    title: 'Control de calidad',
+    text: 'Seguimiento de cada lote desde la cosecha hasta el embarque.',
   },
 ];
  
@@ -64,16 +57,6 @@ export default function Home({ setTab, homeTab = 'dashboard' }) {
             </button>
           </div>
         </div>
-      </section>
- 
-      {/* STATS */}
-      <section className="home-stats">
-        {stats.map(s => (
-          <div key={s.label} className="home-stat">
-            <span className="home-stat-value">{s.value}</span>
-            <span className="home-stat-label">{s.label}</span>
-          </div>
-        ))}
       </section>
  
       {/* QUIÉNES SOMOS */}
@@ -139,17 +122,6 @@ export default function Home({ setTab, homeTab = 'dashboard' }) {
               <p>{s.text}</p>
             </div>
           ))}
-        </div>
-      </section>
- 
-      {/* CONTACTO */}
-      <section className="home-cta">
-        <h2>¿Querés importar nuestro kiwi?</h2>
-        <p>Escribinos y nuestro equipo comercial te va a contactar.</p>
-        <div className="home-contact">
-          <span>📧 comercial@cooperativakiwi.com</span>
-          <span>📞 +54 9 11 0000-0000</span>
-          <span>📍 Argentina</span>
         </div>
       </section>
  

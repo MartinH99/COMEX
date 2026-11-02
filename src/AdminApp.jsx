@@ -26,6 +26,7 @@ export default function AdminApp({ user, onLogout }) {
   const [prospectToDelete, setProspectToDelete] = useState(null);
   // Datos del prospecto con los que se precarga el formulario de embarque
   const [shipmentDraft, setShipmentDraft] = useState(null);
+  const [editingShipment, setEditingShipment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [toasts, setToasts] = useState([]);
@@ -119,6 +120,18 @@ export default function AdminApp({ user, onLogout }) {
       setProspects(await response.json());
     } catch (err) {
       showToast(`No se pudieron actualizar los prospectos: ${err.message}`, 'error');
+    }
+  };
+
+  const handleUpdateShipment = async (shipmentData) => {
+    const updated = await sendJson(`/api/shipments/${editingShipment.id}`, 'PUT', shipmentData);
+    if (updated) {
+      setShipments(prev => prev.map(s => (s.id === updated.id ? updated : s)));
+      setFocus(prev => ({ key: prev.key + 1, shipmentId: updated.id }));
+      setEditingShipment(null);
+      setTab('shipments');
+      showToast(`Embarque ${updated.code} actualizado`, 'ok');
+      refreshNotifications();
     }
   };
 
@@ -221,6 +234,32 @@ export default function AdminApp({ user, onLogout }) {
     return updated;
   };
 
+  const handleEditClient = async (id, clientData) => {
+    const updated = await sendJson(`/api/clients/${id}`, 'PUT', clientData);
+    if (updated) {
+      setClients(prev => prev.map(c => (c.id === id ? updated : c)).sort((a, b) => a.company.localeCompare(b.company)));
+      setUsers(prev => prev.map(u => (u.clientId === id ? { ...u, clientCompany: updated.company } : u)));
+      showToast(`Cliente ${updated.company} actualizado`, 'ok');
+      refreshProspects();
+    }
+    return updated;
+  };
+
+  const handleDeleteClient = async (client) => {
+    try {
+      const response = await apiFetch(`/api/clients/${client.id}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo eliminar');
+
+      setClients(prev => prev.filter(c => c.id !== client.id));
+      showToast(`Cliente ${client.company} eliminado`, 'ok');
+      return true;
+    } catch (err) {
+      showToast(err.message, 'error');
+      return false;
+    }
+  };
+
   const handleCreateClient = async (clientData) => {
     const created = await sendJson('/api/clients', 'POST', clientData);
     if (created) {
@@ -302,6 +341,7 @@ export default function AdminApp({ user, onLogout }) {
 
   const openBlankShipmentForm = () => {
     setShipmentDraft(null);
+    setEditingShipment(null);
     setTab('new-shipment');
   };
 
@@ -368,12 +408,16 @@ export default function AdminApp({ user, onLogout }) {
         )}
         {tab === 'new-shipment' && (
           <ShipmentForm
-            key={shipmentDraft?.prospectId ?? 'new'}
+            key={editingShipment ? `edit-${editingShipment.id}` : (shipmentDraft?.prospectId ?? 'new')}
             clients={clients}
             products={products}
-            draft={shipmentDraft}
-            onSave={handleAddShipment}
-            onCancel={() => setTab(shipmentDraft ? 'prospects' : 'shipments')}
+            draft={editingShipment || shipmentDraft}
+            isEditing={Boolean(editingShipment)}
+            onSave={editingShipment ? handleUpdateShipment : handleAddShipment}
+            onCancel={() => {
+              setEditingShipment(null);
+              setTab(shipmentDraft ? 'prospects' : 'shipments');
+            }}
             onError={message => showToast(message, 'error')}
             onCreateProduct={handleCreateProduct}
           />
@@ -387,12 +431,24 @@ export default function AdminApp({ user, onLogout }) {
             activityVersion={activityVersion}
             onNew={openBlankShipmentForm}
             onDelete={setShipmentToDelete}
+            onEdit={shipment => {
+              setShipmentDraft(null);
+              setEditingShipment(shipment);
+              setTab('new-shipment');
+            }}
             onRegisterDelivery={handleRegisterDelivery}
             onChangeStatus={handleChangeStatus}
             onAddFollowUp={handleAddFollowUp}
           />
         )}
-        {tab === 'clients' && <ClientList clients={clients} onCreate={handleCreateClient} />}
+        {tab === 'clients' && (
+          <ClientList
+            clients={clients}
+            onCreate={handleCreateClient}
+            onUpdate={handleEditClient}
+            onDelete={handleDeleteClient}
+          />
+        )}
         {tab === 'calibers' && <CaliberList />}
         {tab === 'users' && (
           <UserList users={users} clients={clients} currentUserId={user.id} onUpdate={handleUpdateUser} />

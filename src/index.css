@@ -213,7 +213,7 @@ table.detail th { padding: 7px 10px; border-bottom: 1px solid var(--border); bac
 table.detail td { padding: 6px 10px; border-bottom: 1px solid #F2F0EA; font-size: 12.5px; }
 table.detail .num { text-align: right; font-variant-numeric: tabular-nums; }
 .detail-meta { display: flex; gap: 6px 18px; flex-wrap: wrap; margin: 10px 0; font-size: 12.5px; color: var(--text-soft); }
-.detail-actions { margin-top: 12px; }
+.detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 
 /* ===== FORMULARIOS ===== */
 input, select, textarea {
@@ -283,6 +283,15 @@ table.table td input { padding: 5px 8px; font-size: 13px; text-align: right; max
 .user-link select { min-width: 150px; padding: 5px 8px; font-size: 13px; }
 .notice { max-width: 560px; padding: 20px; }
 .notice p { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-soft); }
+
+/* ===== BÚSQUEDA Y EXPORTACIÓN ===== */
+.list-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; margin-bottom: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--panel); }
+.list-filters-search { flex: 1 1 220px; min-width: 0; }
+.list-filters-date { flex: 0 1 150px; min-width: 130px; }
+.list-filters-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.list-filters-count { flex-basis: 100%; font-size: 12px; color: var(--text-soft); }
+.list-filters-error { color: var(--alert-tx); font-weight: 600; }
+.action-error { margin-bottom: 12px; padding: 10px 12px; border-radius: var(--radius); background: var(--alert-bg); color: var(--alert-tx); font-size: 13px; }
 
 /* ===== PROSPECTOS ===== */
 .page-filter { margin-bottom: 12px; }
@@ -389,6 +398,10 @@ table.table td .tracking-form input { flex: 1; min-width: 0; max-width: none; ma
   .icon-btn, .bell { min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }
   .sb-link { min-height: 36px; font-size: 12px; }
   .user-link { flex-wrap: wrap; justify-content: flex-end; }
+  .list-filters-search { flex-basis: 100%; }
+  .list-filters-date { flex: 1 1 130px; }
+  .list-filters-actions { width: 100%; margin-left: 0; }
+  .list-filters-actions .btn { flex: 1; }
   .row-actions { flex-wrap: wrap; white-space: normal; }
   .sb-home { min-height: 44px; }
   input, select, textarea, select.caliber-picker, .tracking-status select, table.table td input { min-height: 44px; font-size: 16px; }

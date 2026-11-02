@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { apiFetch } from '../api';
+import { buildShipmentSheets, downloadExcel } from '../lib/excelExport';
+import { ListFilters, matchesDateRange, matchesSearch } from './ListFilters';
 import { NOTIFICATION_TYPES } from './NotificationCenter';
 import { Modal, StatusBadge, formatDate, formatDateTime, formatUsd } from './ui';
 
@@ -142,7 +144,7 @@ function Tracking({ shipment, readOnly, activityVersion, onChangeStatus, onRegis
   );
 }
 
-function CaliberDetail({ shipment, readOnly, onRegisterDelivery }) {
+function CaliberDetail({ shipment, readOnly, onEdit, onRegisterDelivery }) {
   const rows = Object.entries(shipment.calibres || {}).filter(([, item]) => item.boxes > 0);
   const isRegistered = shipment.deliveredBoxes !== null && shipment.deliveredBoxes !== undefined;
 
@@ -184,6 +186,7 @@ function CaliberDetail({ shipment, readOnly, onRegisterDelivery }) {
       )}
       {!readOnly && (
         <div className="detail-actions">
+          <button className="btn btn-small" onClick={() => onEdit(shipment)}>Editar embarque</button>
           <button className="btn btn-small" onClick={() => onRegisterDelivery(shipment)}>
             {isRegistered ? 'Editar entrega' : 'Registrar entrega'}
           </button>
@@ -193,10 +196,11 @@ function CaliberDetail({ shipment, readOnly, onRegisterDelivery }) {
   );
 }
 
-export function ShipmentList({ shipments, clients, readOnly, initialOpenId, activityVersion, onNew, onDelete, onRegisterDelivery, onChangeStatus, onAddFollowUp }) {
+export function ShipmentList({ shipments, clients, readOnly, initialOpenId, activityVersion, onNew, onEdit, onDelete, onRegisterDelivery, onChangeStatus, onAddFollowUp }) {
   const [statusFilter, setStatusFilter] = useState('Todos');
   const [openId, setOpenId] = useState(initialOpenId ?? null);
   const [deliveryShipmentId, setDeliveryShipmentId] = useState(null);
+  const [filters, setFilters] = useState({ search: '', from: '', to: '' });
 
   // Al llegar desde una notificación, llevar el embarque a la vista
   useEffect(() => {
@@ -206,7 +210,12 @@ export function ShipmentList({ shipments, clients, readOnly, initialOpenId, acti
   }, [initialOpenId]);
 
   const statuses = ['Todos', ...new Set(shipments.map(s => s.status))];
-  const visible = statusFilter === 'Todos' ? shipments : shipments.filter(s => s.status === statusFilter);
+  const visible = shipments.filter(s => {
+    if (statusFilter !== 'Todos' && s.status !== statusFilter) return false;
+    const client = clients.find(c => c.id === s.clientId);
+    return matchesSearch(filters.search, [s.code, client?.company, client?.country, s.product, s.port, s.condition])
+      && matchesDateRange(s.deliveryDate, filters.from, filters.to);
+  });
   const totalBoxes = visible.reduce((sum, s) => sum + (s.boxes || 0), 0);
   const totalUsd = visible.reduce((sum, s) => sum + (s.totalUsd || 0), 0);
   const deliveryShipment = shipments.find(s => s.id === deliveryShipmentId);
@@ -228,6 +237,16 @@ export function ShipmentList({ shipments, clients, readOnly, initialOpenId, acti
           </div>
         )}
       </div>
+
+      <ListFilters
+        filters={filters}
+        setFilters={setFilters}
+        searchPlaceholder="Código, cliente, producto o puerto"
+        dateLabel="Entrega"
+        total={shipments.length}
+        shown={visible.length}
+        onExport={() => downloadExcel(buildShipmentSheets(visible, clients), 'Embarques')}
+      />
 
       <div className="section">
         {visible.length === 0 ? (
@@ -287,7 +306,7 @@ export function ShipmentList({ shipments, clients, readOnly, initialOpenId, acti
                           <td colSpan={10}>
                             <div className="detail-grid">
                               <div>
-                                <CaliberDetail shipment={s} readOnly={readOnly} onRegisterDelivery={shipment => setDeliveryShipmentId(shipment.id)} />
+                                <CaliberDetail shipment={s} readOnly={readOnly} onEdit={onEdit} onRegisterDelivery={shipment => setDeliveryShipmentId(shipment.id)} />
                               </div>
                               <Tracking
                                 shipment={s}

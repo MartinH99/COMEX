@@ -1,23 +1,49 @@
 import { useState } from 'react';
+import { ConfirmModal } from './ui';
 
 const EMPTY_CLIENT = { company: '', country: '', contact: '', rating: 5, defaultPayment: '' };
 
-export function ClientList({ clients, onCreate }) {
-  const [showForm, setShowForm] = useState(false);
+export function ClientList({ clients, onCreate, onUpdate, onDelete }) {
+  // null: formulario cerrado; 'new': alta; un cliente: edición
+  const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_CLIENT);
+  const [clientToDelete, setClientToDelete] = useState(null);
 
+  const isEditing = editing && editing !== 'new';
   const update = (field) => (e) => setForm({ ...form, [field]: e.target.value });
+
+  const openNew = () => {
+    setForm(EMPTY_CLIENT);
+    setEditing('new');
+  };
+
+  const openEdit = (client) => {
+    setForm({
+      company: client.company,
+      country: client.country,
+      contact: client.contact,
+      rating: client.rating,
+      defaultPayment: client.defaultPayment
+    });
+    setEditing(client);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
-    const created = await onCreate({ ...form, rating: Number(form.rating) });
+    const data = { ...form, rating: Number(form.rating) };
+    const saved = isEditing ? await onUpdate(editing.id, data) : await onCreate(data);
     setSaving(false);
-    if (created) {
-      setForm(EMPTY_CLIENT);
-      setShowForm(false);
-    }
+    if (saved) setEditing(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    const client = clientToDelete;
+    setClientToDelete(null);
+    const deleted = await onDelete(client);
+    if (deleted && editing?.id === client.id) setEditing(null);
   };
 
   return (
@@ -26,15 +52,16 @@ export function ClientList({ clients, onCreate }) {
         <h1>Clientes</h1>
         <span className="badge brand">{clients.length} registrados</span>
         <div className="right">
-          <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
-            {showForm ? 'Cerrar' : '+ Nuevo cliente'}
+          <button className="btn btn-primary" onClick={editing ? () => setEditing(null) : openNew}>
+            {editing ? 'Cerrar' : '+ Nuevo cliente'}
           </button>
         </div>
       </div>
 
       <div className="section">
-        {showForm && (
+        {editing && (
           <form className="section-form" onSubmit={handleSubmit}>
+            <h2>{isEditing ? `Editar ${editing.company}` : 'Nuevo cliente'}</h2>
             <div className="form-grid">
               <div>
                 <label htmlFor="company">Empresa</label>
@@ -60,8 +87,10 @@ export function ClientList({ clients, onCreate }) {
               </div>
             </div>
             <div className="form-footer">
-              <button type="button" className="btn btn-subtle" onClick={() => setShowForm(false)}>Cancelar</button>
-              <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Guardando…' : 'Guardar cliente'}</button>
+              <button type="button" className="btn btn-subtle" onClick={() => setEditing(null)}>Cancelar</button>
+              <button type="submit" className="btn btn-primary" disabled={saving}>
+                {saving ? 'Guardando…' : (isEditing ? 'Guardar cambios' : 'Guardar cliente')}
+              </button>
             </div>
           </form>
         )}
@@ -75,6 +104,7 @@ export function ClientList({ clients, onCreate }) {
                 <th>Contacto</th>
                 <th>Calificación</th>
                 <th>Condición de pago habitual</th>
+                <th aria-label="Acciones" />
               </tr>
             </thead>
             <tbody>
@@ -88,13 +118,40 @@ export function ClientList({ clients, onCreate }) {
                       {'★'.repeat(c.rating)}<span className="off">{'★'.repeat(5 - c.rating)}</span>
                     </span>
                   </td>
-                  <td data-label="Condición de pago">{c.defaultPayment}</td>
+                  <td data-label="Condición de pago">{c.defaultPayment || '—'}</td>
+                  <td>
+                    <div className="row-actions">
+                      <button className="btn btn-small" onClick={() => openEdit(c)}>Editar</button>
+                      <button
+                        className="icon-btn"
+                        aria-label={`Eliminar cliente ${c.company}`}
+                        title="Eliminar"
+                        onClick={() => setClientToDelete(c)}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4h8v2" />
+                          <path d="M19 6l-1 14H6L5 6" />
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      {clientToDelete && (
+        <ConfirmModal
+          title="Eliminar cliente"
+          message={`Se va a eliminar a ${clientToDelete.company}. Solo es posible si no tiene embarques, prospectos ni usuarios vinculados.`}
+          confirmLabel="Eliminar"
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setClientToDelete(null)}
+        />
+      )}
     </section>
   );
 }

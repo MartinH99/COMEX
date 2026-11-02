@@ -34,6 +34,12 @@ CREATE TABLE IF NOT EXISTS shipments (
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Último número de embarque usado por año
+CREATE TABLE IF NOT EXISTS shipment_counters (
+  year        INTEGER PRIMARY KEY,
+  last_number INTEGER NOT NULL
+);
+
 -- Tabla de Usuarios: administradores y clientes
 CREATE TABLE IF NOT EXISTS users (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,

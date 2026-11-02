@@ -101,6 +101,10 @@ const SCHEMA = [
     shipment_id   INTEGER REFERENCES shipments(id) ON DELETE SET NULL,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS shipment_counters (
+    year        INTEGER PRIMARY KEY,
+    last_number INTEGER NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS users (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     username      TEXT NOT NULL UNIQUE COLLATE NOCASE,

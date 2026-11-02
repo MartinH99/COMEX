@@ -354,6 +354,99 @@ const reminderStatements = () => {
   ];
 };
 
+// Dos letras del producto, sin acentos: Kiwi -> KW, Pera -> PE
+function productPrefix(product) {
+  const letters = product.normalize('NFD').replace(/[^A-Za-z]/g, '').toUpperCase();
+  if (letters.startsWith('KIWI')) return 'KW';
+  return letters.slice(0, 2).padEnd(2, 'X');
+}
+
+// El contador sube en una sola operación, así dos embarques simultáneos nunca reciben el mismo número
+async function nextShipmentCode(product, loadWeek) {
+  const year = Number(localDate().slice(0, 4));
+  const { rows } = await db.execute({
+    sql: `
+      INSERT INTO shipment_counters (year, last_number) VALUES (?, 1)
+      ON CONFLICT(year) DO UPDATE SET last_number = last_number + 1
+      RETURNING last_number
+    `,
+    args: [year]
+  });
+  const number = String(rows[0].last_number).padStart(4, '0');
+  return `${productPrefix(product)}-${year}-W${loadWeek}-${number}`;
+}
+
+const selectClientById = (id) => ({
+  sql: 'SELECT id, company, country, contact, rating, default_payment AS defaultPayment FROM clients WHERE id = ?',
+  args: [id]
+});
+
+// PUT /api/clients/:id
+app.put('/api/clients/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const company = (req.body.company || '').trim();
+    const country = (req.body.country || '').trim();
+    const contact = (req.body.contact || '').trim();
+    const defaultPayment = (req.body.defaultPayment || '').trim();
+    const rating = Number(req.body.rating ?? 5);
+
+    if (!company || !country || !contact) {
+      return res.status(400).json({ error: 'Empresa, país y contacto son obligatorios.' });
+    }
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return res.status(400).json({ error: 'La calificación debe estar entre 1 y 5.' });
+    }
+
+    const [, , selected] = await db.batch([
+      {
+        sql: 'UPDATE clients SET company = ?, country = ?, contact = ?, rating = ?, default_payment = ? WHERE id = ?',
+        args: [company, country, contact, rating, defaultPayment, id]
+      },
+      // Los prospectos abiertos guardan una copia de estos datos
+      {
+        sql: 'UPDATE prospectos SET company = ?, country = ?, contact = ? WHERE client_id = ? AND shipment_id IS NULL',
+        args: [company, country, contact, id]
+      },
+      selectClientById(id)
+    ], 'write');
+
+    if (selected.rows.length === 0) {
+      return res.status(404).json({ error: 'Cliente no encontrado.' });
+    }
+    res.json(plain(selected.rows[0]));
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar el cliente: ' + error.message });
+  }
+});
+
+// DELETE /api/clients/:id: solo si nada depende del cliente
+app.delete('/api/clients/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const count = async (sql) => Number((await db.execute({ sql, args: [id] })).rows[0].count);
+
+    const blockers = [
+      [await count('SELECT COUNT(*) AS count FROM shipments WHERE client_id = ?'), 'embarque'],
+      [await count('SELECT COUNT(*) AS count FROM prospectos WHERE client_id = ?'), 'prospecto'],
+      [await count('SELECT COUNT(*) AS count FROM users WHERE client_id = ?'), 'usuario']
+    ].filter(([total]) => total > 0);
+
+    if (blockers.length > 0) {
+      const detail = blockers.map(([total, label]) => `${total} ${label}${total === 1 ? '' : 's'}`).join(', ');
+      return res.status(409).json({ error: `No se puede eliminar: está vinculado a ${detail}.` });
+    }
+
+    const result = await db.execute({ sql: 'DELETE FROM clients WHERE id = ?', args: [id] });
+    if (result.rowsAffected === 0) {
+      return res.status(404).json({ error: 'Cliente no encontrado.' });
+    }
+    res.json({ ok: true, id });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar el cliente: ' + error.message });
+  }
+});
+
 // GET /api/clients
 app.get('/api/clients', async (req, res) => {
   try {
@@ -439,8 +532,6 @@ app.post('/api/shipments', async (req, res) => {
     return res.status(400).json({ error: 'Datos de embarque incompletos o inválidos.' });
   }
 
-  const generatedCode = `KW-2025-W${loadWeek}-${Math.floor(100 + Math.random() * 900)}`;
-
   try {
     if (prospectId) {
       const { rows } = await db.execute({ sql: 'SELECT shipment_id FROM prospectos WHERE id = ?', args: [prospectId] });
@@ -451,6 +542,8 @@ app.post('/api/shipments', async (req, res) => {
         return res.status(409).json({ error: 'Este prospecto ya tiene un embarque creado.' });
       }
     }
+
+    const generatedCode = await nextShipmentCode(product || 'Kiwi', loadWeek);
 
     // Embarque + calibres en una sola transacción; los calibres referencian el embarque por su código único
     const statements = [{
@@ -498,6 +591,83 @@ app.post('/api/shipments', async (req, res) => {
     res.status(201).json({ ...plain(newShipment), calibres });
   } catch (error) {
     res.status(500).json({ error: 'Error al registrar embarque: ' + error.message });
+  }
+});
+
+// PUT /api/shipments/:id: corrige los datos sin tocar código, estado ni entrega registrada
+app.put('/api/shipments/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { clientId, condition, deal, product, deliveryDate, transport, paymentTerms, variance, calibres } = req.body;
+    const port = (req.body.port || '').trim();
+    const loadWeek = Number(req.body.loadWeek);
+
+    if (!clientId || !port || !paymentTerms?.trim()) {
+      return res.status(400).json({ error: 'Datos de embarque incompletos o inválidos.' });
+    }
+    if (!Number.isInteger(loadWeek) || loadWeek < 1 || loadWeek > 52) {
+      return res.status(400).json({ error: 'La semana de salida debe estar entre 1 y 52.' });
+    }
+
+    // Cajas y total se recalculan acá, no se confía en lo que manda el navegador
+    const caliberStatements = [];
+    let boxes = 0;
+    let totalUsd = 0;
+    for (const [code, item] of Object.entries(calibres || {})) {
+      const itemBoxes = Number(item.boxes);
+      const priceKg = Number(item.priceKg);
+      if (!Number.isInteger(itemBoxes) || itemBoxes < 0 || !(priceKg >= 0)) {
+        return res.status(400).json({ error: `Valores inválidos en el calibre ${code}.` });
+      }
+      if (itemBoxes === 0) continue;
+      boxes += itemBoxes;
+      totalUsd += itemBoxes * 10 * priceKg;
+      caliberStatements.push({
+        sql: 'INSERT INTO shipment_calibers (shipment_id, code, boxes, price_kg) VALUES (?, ?, ?, ?)',
+        args: [id, code, itemBoxes, priceKg]
+      });
+    }
+    if (boxes === 0) {
+      return res.status(400).json({ error: 'Ingresá la cantidad de cajas en al menos un calibre.' });
+    }
+
+    const existing = await db.execute({ sql: 'SELECT id FROM shipments WHERE id = ?', args: [id] });
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Embarque no encontrado.' });
+    }
+    const client = await db.execute({ sql: 'SELECT id FROM clients WHERE id = ?', args: [clientId] });
+    if (client.rows.length === 0) {
+      return res.status(400).json({ error: 'Cliente no encontrado.' });
+    }
+
+    const results = await db.batch([
+      {
+        sql: `
+          UPDATE shipments SET
+            client_id = ?, condition = ?, deal = ?, product = ?, delivery_date = ?, transport = ?, port = ?,
+            payment_terms = ?, variance = ?, load_week = ?, boxes = ?, total_usd = ?
+          WHERE id = ?
+        `,
+        args: [
+          clientId, condition, deal, product?.trim() || 'Kiwi', deliveryDate || null, transport || 'Marítimo', port,
+          paymentTerms.trim(), variance ?? 2.0, loadWeek, boxes, totalUsd, id
+        ]
+      },
+      { sql: 'DELETE FROM shipment_calibers WHERE shipment_id = ?', args: [id] },
+      ...caliberStatements,
+      notifyFromShipment(id, 'updated', "'Se actualizaron los datos del embarque'"),
+      { sql: `${SELECT_SHIPMENT} WHERE s.id = ?`, args: [id] },
+      { sql: 'SELECT code, boxes, price_kg AS priceKg FROM shipment_calibers WHERE shipment_id = ?', args: [id] }
+    ], 'write');
+
+    const updated = results[results.length - 2].rows[0];
+    const savedCalibres = {};
+    results[results.length - 1].rows.forEach(c => {
+      savedCalibres[c.code] = { boxes: c.boxes, priceKg: c.priceKg };
+    });
+    res.json({ ...plain(updated), calibres: savedCalibres });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar el embarque: ' + error.message });
   }
 });
 

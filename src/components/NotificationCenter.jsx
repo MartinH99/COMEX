@@ -6,6 +6,7 @@ export const NOTIFICATION_TYPES = {
   'followup': { label: 'Seguimiento', badge: 'gray' },
   'delivery': { label: 'Entrega', badge: 'ok' },
   'created': { label: 'Nuevo embarque', badge: 'brand' },
+  'updated': { label: 'Datos actualizados', badge: 'gray' },
   'deleted': { label: 'Eliminado', badge: 'alert' },
   'due-soon': { label: 'Entrega próxima', badge: 'pend' },
   'overdue': { label: 'Entrega vencida', badge: 'alert' }
