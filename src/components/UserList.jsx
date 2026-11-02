@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Modal } from './ui';
+import { Entity, ICONS, Modal, PageHeader, Stat } from './ui';
 
 const STATUS = {
   pending: { label: 'Pendiente', badge: 'pend' },
@@ -107,12 +107,14 @@ export function UserList({ users, clients, currentUserId, onUpdate, onCreateAdmi
 
   return (
     <section>
-      <div className="page-header">
-        <h1>Usuarios</h1>
-        {pending > 0 && <span className="badge pend">{pending} {pending === 1 ? 'pendiente' : 'pendientes'} de aprobación</span>}
-        <div className="right">
-          <button className="btn btn-primary" onClick={() => setShowNewAdmin(true)}>+ Nuevo administrador</button>
-        </div>
+      <PageHeader icon={ICONS.users} title="Usuarios" description="Accesos del equipo y de tus clientes.">
+        <button className="btn btn-primary" onClick={() => setShowNewAdmin(true)}>+ Nuevo administrador</button>
+      </PageHeader>
+
+      <div className="kpi-grid stat-grid">
+        <Stat icon={ICONS.shield} label="Administradores" value={users.filter(u => u.role === 'admin').length} sub="Acceso completo" />
+        <Stat icon={ICONS.clients} label="Clientes activos" value={users.filter(u => u.role === 'client' && u.status === 'active').length} sub="Con acceso a su portal" />
+        <Stat icon={ICONS.clock} tone={pending > 0 ? 'pend' : undefined} label="Pendientes" value={pending} sub="Esperan aprobación" />
       </div>
 
       <div className="section">
@@ -135,8 +137,7 @@ export function UserList({ users, clients, currentUserId, onUpdate, onCreateAdmi
                 return (
                   <tr key={u.id}>
                     <td>
-                      <div className="strong">{u.username}</div>
-                      <div className="kpi-sub">{[u.fullName, u.email].filter(Boolean).join(' · ')}</div>
+                      <Entity name={u.username} detail={[u.fullName, u.email].filter(Boolean).join(' · ')} />
                     </td>
                     <td data-label="Tipo">{u.role === 'admin' ? 'Admin' : 'Cliente'}</td>
                     <td data-label="Empresa declarada">{u.company ? `${u.company}${u.country ? ` (${u.country})` : ''}` : '—'}</td>

@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Pagination, usePagination } from './Pagination';
-import { ConfirmModal } from './ui';
+import { ConfirmModal, Entity, ICONS, PageHeader, Stat, formatUsd } from './ui';
 
 const EMPTY_CLIENT = { company: '', country: '', contact: '', rating: 5, defaultPayment: '' };
 
-export function ClientList({ clients, onCreate, onUpdate, onDelete }) {
+export function ClientList({ clients, shipments, onCreate, onUpdate, onDelete }) {
   // null: formulario cerrado; 'new': alta; un cliente: edición
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -13,6 +13,16 @@ export function ClientList({ clients, onCreate, onUpdate, onDelete }) {
 
   const { pageItems, page, totalPages, setPage } = usePagination(clients, 'clientes');
   const isEditing = editing && editing !== 'new';
+  const salesByClient = new Map();
+  shipments.forEach(s => {
+    const current = salesByClient.get(s.clientId) || { count: 0, usd: 0 };
+    salesByClient.set(s.clientId, { count: current.count + 1, usd: current.usd + (s.totalUsd || 0) });
+  });
+  const clientsWithShipments = clients.filter(c => salesByClient.has(c.id)).length;
+  const countries = new Set(clients.map(c => c.country.trim().toLowerCase())).size;
+  const averageRating = clients.length > 0
+    ? (clients.reduce((sum, c) => sum + c.rating, 0) / clients.length).toFixed(1)
+    : '—';
   const update = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
   const openNew = () => {
@@ -49,15 +59,18 @@ export function ClientList({ clients, onCreate, onUpdate, onDelete }) {
   };
 
   return (
-    <section style={{ maxWidth: 1000 }}>
-      <div className="page-header">
-        <h1>Clientes</h1>
-        <span className="badge brand">{clients.length} registrados</span>
-        <div className="right">
-          <button className="btn btn-primary" onClick={editing ? () => setEditing(null) : openNew}>
-            {editing ? 'Cerrar' : '+ Nuevo cliente'}
-          </button>
-        </div>
+    <section>
+      <PageHeader icon={ICONS.clients} title="Clientes" description="Tu cartera de compradores y su historial con vos.">
+        <button className="btn btn-primary" onClick={editing ? () => setEditing(null) : openNew}>
+          {editing ? 'Cerrar' : '+ Nuevo cliente'}
+        </button>
+      </PageHeader>
+
+      <div className="kpi-grid stat-grid">
+        <Stat icon={ICONS.clients} label="Clientes" value={clients.length} sub={`${clientsWithShipments} con embarques`} />
+        <Stat icon={ICONS.globe} label="Países" value={countries} sub="Destinos en cartera" />
+        <Stat icon={ICONS.star} label="Calificación promedio" value={averageRating} sub="Sobre 5 estrellas" />
+        <Stat icon={ICONS.collections} label="Ventas totales" value={formatUsd(shipments.reduce((sum, s) => sum + (s.totalUsd || 0), 0))} sub="Todos los embarques" />
       </div>
 
       <div className="section">
@@ -102,18 +115,18 @@ export function ClientList({ clients, onCreate, onUpdate, onDelete }) {
             <thead>
               <tr>
                 <th>Empresa</th>
-                <th>País</th>
                 <th>Contacto</th>
                 <th>Calificación</th>
                 <th>Condición de pago habitual</th>
+                <th className="num">Embarques</th>
+                <th className="num">Ventas USD</th>
                 <th aria-label="Acciones" />
               </tr>
             </thead>
             <tbody>
               {pageItems.map(c => (
                 <tr key={c.id}>
-                  <td className="strong">{c.company}</td>
-                  <td data-label="País">{c.country}</td>
+                  <td><Entity name={c.company} detail={c.country} /></td>
                   <td data-label="Contacto">{c.contact}</td>
                   <td data-label="Calificación">
                     <span className="stars" aria-label={`${c.rating} de 5`}>
@@ -121,6 +134,8 @@ export function ClientList({ clients, onCreate, onUpdate, onDelete }) {
                     </span>
                   </td>
                   <td data-label="Condición de pago">{c.defaultPayment || '—'}</td>
+                  <td data-label="Embarques" className="num">{salesByClient.get(c.id)?.count || 0}</td>
+                  <td data-label="Ventas USD" className="num strong">{formatUsd(salesByClient.get(c.id)?.usd || 0)}</td>
                   <td>
                     <div className="row-actions">
                       <button className="btn btn-small" onClick={() => openEdit(c)}>Editar</button>

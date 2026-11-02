@@ -4,7 +4,7 @@ import { downloadProspectPdf } from '../lib/prospectPdf';
 import { ListFilters, matchesDateRange, matchesSearch } from './ListFilters';
 import { Pagination, usePagination } from './Pagination';
 import { PROSPECT_STATUSES } from './ProspectForm';
-import { formatDate, formatUsd } from './ui';
+import { Entity, ICONS, PageHeader, Stat, formatDate, formatUsd } from './ui';
 
 const STATUS_CLASS = {
   'Nuevo': 'gray',
@@ -61,36 +61,19 @@ export function ProspectList({ prospects, readOnly, onNew, onEdit, onDelete, onC
 
   return (
     <section>
-      <div className="page-header">
-        <h1>{readOnly ? 'Mis prospectos' : 'Prospectos'}</h1>
-        {!readOnly && (
-          <div className="right">
-            <button className="btn btn-primary" onClick={onNew}>+ Nuevo prospecto</button>
-          </div>
-        )}
-      </div>
+      <PageHeader
+        icon={ICONS.prospects}
+        title={readOnly ? 'Mis prospectos' : 'Prospectos'}
+        description={readOnly ? 'Las propuestas que te enviamos.' : 'Presupuestos y oportunidades antes de convertirse en embarque.'}
+      >
+        {!readOnly && <button className="btn btn-primary" onClick={onNew}>+ Nuevo prospecto</button>}
+      </PageHeader>
 
-      <div className="kpi-grid">
-        <div className="kpi">
-          <div className="kpi-label">Prospectos abiertos</div>
-          <div className="kpi-value">{open.length}</div>
-          <div className="kpi-sub">Nuevos, cotizados o en negociación</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Valor en cartera</div>
-          <div className="kpi-value">{formatUsd(openUsd)}</div>
-          <div className="kpi-sub">Suma de presupuestos abiertos</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Volumen en cartera</div>
-          <div className="kpi-value">{openBoxes.toLocaleString('en-US')}</div>
-          <div className="kpi-sub">Cajas de 10 kg</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Convertidos</div>
-          <div className="kpi-value">{converted}</div>
-          <div className="kpi-sub">Con embarque creado</div>
-        </div>
+      <div className="kpi-grid stat-grid">
+        <Stat icon={ICONS.prospects} label="Prospectos abiertos" value={open.length} sub="Nuevos, cotizados o en negociación" />
+        <Stat icon={ICONS.collections} label="Valor en cartera" value={formatUsd(openUsd)} sub="Suma de presupuestos abiertos" />
+        <Stat icon={ICONS.box} label="Volumen en cartera" value={openBoxes.toLocaleString('en-US')} sub="Cajas de 10 kg" />
+        <Stat icon={ICONS.check} label="Convertidos" value={converted} sub="Con embarque creado" />
       </div>
 
       <div className="pills page-filter">
@@ -139,8 +122,7 @@ export function ProspectList({ prospects, readOnly, onNew, onEdit, onDelete, onC
                   return (
                     <tr key={p.id}>
                       <td>
-                        <div className="strong">{p.company}</div>
-                        <div className="kpi-sub">{[p.country, p.contact].filter(Boolean).join(' · ')}</div>
+                        <Entity name={p.company} detail={[p.country, p.contact].filter(Boolean).join(' · ')} />
                       </td>
                       <td data-label="Producto">{p.product}</td>
                       <td data-label="Puerto">{p.port || '—'}</td>

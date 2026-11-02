@@ -483,6 +483,7 @@ export default function AdminApp({ user, onLogout }) {
         {tab === 'clients' && (
           <ClientList
             clients={clients}
+            shipments={shipments}
             onCreate={handleCreateClient}
             onUpdate={handleEditClient}
             onDelete={handleDeleteClient}

@@ -8,7 +8,7 @@ import { Pagination, usePagination } from './Pagination';
 import { ShipmentDocuments } from './ShipmentDocuments';
 import { ShipmentFinance } from './ShipmentFinance';
 import { ShipmentLogistics } from './ShipmentLogistics';
-import { Modal, StatusBadge, formatDate, formatDateTime, formatUsd } from './ui';
+import { Entity, ICONS, Modal, PageHeader, Stat, StatusBadge, formatDate, formatDateTime, formatUsd } from './ui';
 
 const SHIPMENT_STATUSES = ['Programado', 'En Tránsito', 'Entregado'];
 const BOXES_PER_PALLET = 104;
@@ -216,6 +216,7 @@ export function ShipmentList({ shipments, clients, readOnly, initialOpenId, acti
   }, [initialOpenId]);
 
   const statuses = ['Todos', ...new Set(shipments.map(s => s.status))];
+  const countByStatus = (status) => shipments.filter(s => s.status === status).length;
   const visible = shipments.filter(s => {
     if (statusFilter !== 'Todos' && s.status !== statusFilter) return false;
     const client = clients.find(c => c.id === s.clientId);
@@ -233,20 +234,27 @@ export function ShipmentList({ shipments, clients, readOnly, initialOpenId, acti
 
   return (
     <section>
-      <div className="page-header">
-        <h1>{readOnly ? 'Mis embarques' : 'Embarques'}</h1>
-        <div className="pills">
-          {statuses.map(status => (
-            <button key={status} className={statusFilter === status ? 'active' : ''} onClick={() => setStatusFilter(status)}>
-              {status}
-            </button>
-          ))}
-        </div>
-        {!readOnly && (
-          <div className="right">
-            <button className="btn btn-primary" onClick={onNew}>+ Nuevo embarque</button>
-          </div>
-        )}
+      <PageHeader
+        icon={ICONS.shipments}
+        title={readOnly ? 'Mis embarques' : 'Embarques'}
+        description={readOnly ? 'Estado, logística y documentos de tus cargas.' : 'Seguí cada carga, desde la salida hasta el cobro.'}
+      >
+        {!readOnly && <button className="btn btn-primary" onClick={onNew}>+ Nuevo embarque</button>}
+      </PageHeader>
+
+      <div className="kpi-grid stat-grid">
+        <Stat icon={ICONS.box} label="Total" value={shipments.length} sub={`${shipments.reduce((sum, s) => sum + (s.boxes || 0), 0).toLocaleString('en-US')} cajas`} />
+        <Stat icon={ICONS.clock} label="Programados" value={countByStatus('Programado')} sub="Pendientes de salida" />
+        <Stat icon={ICONS.shipments} label="En tránsito" value={countByStatus('En Tránsito')} sub="Camino a destino" />
+        <Stat icon={ICONS.check} label="Entregados" value={countByStatus('Entregado')} sub="Con entrega registrada" />
+      </div>
+
+      <div className="pills page-filter">
+        {statuses.map(status => (
+          <button key={status} className={statusFilter === status ? 'active' : ''} onClick={() => setStatusFilter(status)}>
+            {status}
+          </button>
+        ))}
       </div>
 
       <ListFilters
@@ -288,7 +296,7 @@ export function ShipmentList({ shipments, clients, readOnly, initialOpenId, acti
                     <Fragment key={s.id}>
                       <tr id={`shipment-${s.id}`} className={`expandable${isOpen ? ' open' : ''}`} aria-expanded={isOpen} onClick={() => setOpenId(isOpen ? null : s.id)}>
                         <td><span className="mono strong">{s.code}</span></td>
-                        <td data-label="Cliente">{client?.company || 'N/A'}</td>
+                        <td data-label="Cliente"><Entity name={client?.company || 'N/A'} detail={client?.country} /></td>
                         <td data-label="Producto">{s.product}</td>
                         <td data-label="Salida">W{s.loadWeek}</td>
                         <td data-label="Entrega est.">{s.deliveryDate ? formatDate(s.deliveryDate) : (s.etaWeek || '—')}</td>

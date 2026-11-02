@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { PAYMENT_BADGE, getFinance, today } from '../lib/finance';
-import { Modal, formatDate, formatUsd } from './ui';
+import { Entity, ICONS, Modal, PageHeader, Stat, formatDate, formatUsd } from './ui';
 
 function PayFullModal({ shipment, balance, onConfirm, onClose }) {
   const [paidAt, setPaidAt] = useState(today());
@@ -66,31 +66,24 @@ export function Collections({ shipments, clients, onOpenShipment, onPayFull }) {
 
   return (
     <section>
-      <div className="page-header">
-        <h1>Cobros</h1>
-        <div className="pills">
-          <button className={view === 'pending' ? 'active' : ''} onClick={() => setView('pending')}>Pendientes ({pending.length})</button>
-          <button className={view === 'overdue' ? 'active' : ''} onClick={() => setView('overdue')}>Vencidos ({overdue.length})</button>
-          <button className={view === 'paid' ? 'active' : ''} onClick={() => setView('paid')}>Pagados ({paidRows.length})</button>
-        </div>
+      <PageHeader icon={ICONS.collections} title="Cobros" description="Saldos pendientes, vencimientos y pagos de cada embarque." />
+
+      <div className="kpi-grid stat-grid">
+        <Stat icon={ICONS.clock} label="Por cobrar" value={formatUsd(totalBalance)} sub={`${pending.length} ${pending.length === 1 ? 'embarque' : 'embarques'} con saldo`} />
+        <Stat
+          icon={ICONS.alert}
+          tone={overdue.length > 0 ? 'alert' : undefined}
+          label="Vencido"
+          value={formatUsd(totalOverdue)}
+          sub={`${overdue.length} ${overdue.length === 1 ? 'embarque vencido' : 'embarques vencidos'}`}
+        />
+        <Stat icon={ICONS.check} label="Cobrado" value={formatUsd(totalPaid)} sub="Total registrado" />
       </div>
 
-      <div className="kpi-grid">
-        <div className="kpi">
-          <div className="kpi-label">Por cobrar</div>
-          <div className="kpi-value">{formatUsd(totalBalance)}</div>
-          <div className="kpi-sub">{pending.length} {pending.length === 1 ? 'embarque' : 'embarques'} con saldo</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Vencido</div>
-          <div className="kpi-value">{formatUsd(totalOverdue)}</div>
-          <div className="kpi-sub">{overdue.length} {overdue.length === 1 ? 'embarque vencido' : 'embarques vencidos'}</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Cobrado</div>
-          <div className="kpi-value">{formatUsd(totalPaid)}</div>
-          <div className="kpi-sub">Total registrado</div>
-        </div>
+      <div className="pills page-filter">
+        <button className={view === 'pending' ? 'active' : ''} onClick={() => setView('pending')}>Pendientes ({pending.length})</button>
+        <button className={view === 'overdue' ? 'active' : ''} onClick={() => setView('overdue')}>Vencidos ({overdue.length})</button>
+        <button className={view === 'paid' ? 'active' : ''} onClick={() => setView('paid')}>Pagados ({paidRows.length})</button>
       </div>
 
       <div className="section">
@@ -116,11 +109,18 @@ export function Collections({ shipments, clients, onOpenShipment, onPayFull }) {
                 {visible.map(({ shipment, client, finance }) => (
                   <tr key={shipment.id}>
                     <td><span className="mono strong">{shipment.code}</span></td>
-                    <td data-label="Cliente">{client?.company || 'N/A'}</td>
+                    <td data-label="Cliente"><Entity name={client?.company || 'N/A'} /></td>
                     <td data-label="Vencimiento">{shipment.paymentDueDate ? formatDate(shipment.paymentDueDate) : 'Sin fecha'}</td>
                     <td data-label="Estado"><span className={`badge ${PAYMENT_BADGE[finance.paymentStatus]}`}>{finance.paymentStatus}</span></td>
                     <td data-label="Total USD" className="num">{formatUsd(finance.total)}</td>
-                    <td data-label="Cobrado" className="num">{formatUsd(finance.paid)}</td>
+                    <td data-label="Cobrado" className="num">
+                      <span className="paid-cell">
+                        {formatUsd(finance.paid)}
+                        <span className="paid-track" aria-hidden="true">
+                          <span className="paid-bar" style={{ width: `${finance.total > 0 ? Math.min(100, (finance.paid / finance.total) * 100) : 0}%` }} />
+                        </span>
+                      </span>
+                    </td>
                     <td data-label="Saldo" className="num strong">{formatUsd(finance.balance)}</td>
                     <td>
                       <div className="row-actions">
@@ -154,7 +154,7 @@ export function Collections({ shipments, clients, onOpenShipment, onPayFull }) {
               <tbody>
                 {clientRows.map(([id, row]) => (
                   <tr key={id}>
-                    <td className="strong">{row.name}</td>
+                    <td><Entity name={row.name} /></td>
                     <td data-label="Embarques" className="num">{row.count}</td>
                     <td data-label="Vencido" className="num">{formatUsd(row.overdue)}</td>
                     <td data-label="Saldo" className="num strong">{formatUsd(row.balance)}</td>

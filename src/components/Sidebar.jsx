@@ -1,19 +1,11 @@
 import { useState } from 'react';
 import { apiFetch } from '../api';
-import { Modal } from './ui';
+import { ICONS, Modal } from './ui';
 
-const ICONS = {
-  dashboard: ['M12 20V10', 'M18 20V4', 'M6 20v-4'],
-  prospects: ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z', 'M14 2v6h6', 'M9 13h6', 'M9 17h6'],
-  shipments: ['M2 20h20', 'M4 20l-1-6h18l-2 6', 'M6 14V8h12v6', 'M12 8V3'],
-  clients: ['M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z', 'M22 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'],
-  calibers: ['M3 3h7v7H3z', 'M14 3h7v7h-7z', 'M14 14h7v7h-7z', 'M3 14h7v7H3z'],
-  collections: ['M12 2v20', 'M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'],
-  users: ['M12 15a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z', 'M5 21a7 7 0 0 1 14 0', 'M12 2v2']
-};
+const DASHBOARD_ICON = ['M12 20V10', 'M18 20V4', 'M6 20v-4'];
 
 export const ADMIN_NAV = [
-  { id: 'dashboard', label: 'Dashboard', icon: ICONS.dashboard },
+  { id: 'dashboard', label: 'Dashboard', icon: DASHBOARD_ICON },
   { id: 'prospects', label: 'Prospectos', icon: ICONS.prospects },
   { id: 'shipments', label: 'Embarques', icon: ICONS.shipments },
   { id: 'collections', label: 'Cobros', icon: ICONS.collections },
