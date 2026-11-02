@@ -164,6 +164,8 @@ const SCHEMA = [
     failed_logins INTEGER NOT NULL DEFAULT 0,
     locked_until  TEXT,
     last_login_at TEXT,
+    avatar_key    TEXT,
+    avatar_updated_at TEXT,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE TABLE IF NOT EXISTS sessions (
@@ -193,7 +195,11 @@ const SHIPMENT_COLUMNS = [
 ];
 
 const NOTIFICATION_COLUMNS = [['author', 'author TEXT'], ['author_id', 'author_id INTEGER']];
-const USER_COLUMNS = [['last_login_at', 'last_login_at TEXT']];
+const USER_COLUMNS = [
+  ['last_login_at', 'last_login_at TEXT'],
+  ['avatar_key', 'avatar_key TEXT'],
+  ['avatar_updated_at', 'avatar_updated_at TEXT']
+];
 
 // Crea lo que falte sin tocar los datos existentes
 export async function applySchema(client = db) {

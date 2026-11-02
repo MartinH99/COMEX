@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 export const formatUsd = (value) =>
   `$${(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -73,11 +75,29 @@ export function Stat({ icon, label, value, sub, tone }) {
 
 const initials = (name) => (name || '?').trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase();
 
+// Foto si la hay; si falta o no carga, las iniciales
+export function AvatarImage({ className, name, src }) {
+  const [failedSrc, setFailedSrc] = useState(null);
+  const showImage = src && failedSrc !== src;
+
+  return (
+    <span className={className} aria-hidden="true">
+      {showImage
+        ? <img className="avatar-photo" src={src} alt="" onError={() => setFailedSrc(src)} />
+        : initials(name)}
+    </span>
+  );
+}
+
+// Foto del usuario con sesión, o de otro usuario para un administrador
+export const ownAvatarUrl = (user) => (user.hasAvatar ? `/api/auth/avatar?v=${encodeURIComponent(user.avatarVersion)}` : null);
+export const userAvatarUrl = (user) => (user.hasAvatar ? `/api/users/${user.id}/avatar?v=${encodeURIComponent(user.avatarVersion)}` : null);
+
 // Nombre con su inicial y, debajo, un dato secundario
-export function Entity({ name, detail }) {
+export function Entity({ name, detail, image }) {
   return (
     <span className="entity">
-      <span className="entity-avatar" aria-hidden="true">{initials(name)}</span>
+      <AvatarImage className="entity-avatar" name={name} src={image} />
       <span className="entity-text">
         <span className="entity-name">{name}</span>
         {detail && <span className="entity-detail">{detail}</span>}

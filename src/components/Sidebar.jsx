@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { apiFetch } from '../api';
-import { ICONS, Modal } from './ui';
+import { AvatarImage, ICONS, Modal, ownAvatarUrl } from './ui';
 
 const DASHBOARD_ICON = ['M12 20V10', 'M18 20V4', 'M6 20v-4'];
 
@@ -139,7 +139,7 @@ export function Sidebar({ items, currentTab, setTab, user, onLogout, badges = {}
           aria-current={currentTab === 'profile' ? 'page' : undefined}
           onClick={() => setTab('profile')}
         >
-          <span className="sb-avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</span>
+          <AvatarImage className="sb-avatar" name={displayName} src={ownAvatarUrl(user)} />
           <span className="sb-user-text">
             <span className="sb-user-name">{displayName}</span>
             <span className="sb-user-link">Mi perfil</span>

@@ -608,6 +608,95 @@ describe('perfil', () => {
   });
 });
 
+describe('foto de perfil', () => {
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]), Buffer.from('contenido-png')]);
+  const WEBP = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBPcontenido')]);
+  let owner;
+  let ownerId;
+  let stranger;
+
+  const put = async (session, body) => {
+    const response = await fetch(`${baseUrl}/api/auth/avatar`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png', cookie: session.cookie() },
+      body
+    });
+    return { status: response.status, data: await response.json() };
+  };
+
+  const storedFiles = () => {
+    const folder = path.join(process.env.DOCUMENTS_DIR, 'avatares', String(ownerId));
+    return fs.existsSync(folder) ? fs.readdirSync(folder) : [];
+  };
+
+  before(async () => {
+    const created = await registerClient('foto-cliente', 'Empresa A');
+    owner = created.session;
+    ownerId = created.id;
+    stranger = (await registerClient('foto-extrano', 'Empresa B')).session;
+  });
+
+  test('sin sesión no se accede', async () => {
+    const response = await fetch(`${baseUrl}/api/auth/avatar`, { method: 'PUT', body: PNG });
+    assert.equal(response.status, 401);
+    assert.equal((await fetch(`${baseUrl}/api/auth/avatar`)).status, 401);
+    assert.equal((await fetch(`${baseUrl}/api/users/${ownerId}/avatar`)).status, 401);
+  });
+
+  test('el usuario sube su foto y la vuelve a ver intacta', async () => {
+    const saved = await put(owner, PNG);
+    assert.equal(saved.status, 200);
+    assert.equal(saved.data.hasAvatar, 1);
+    assert.ok(saved.data.avatarVersion);
+    assert.doesNotMatch(JSON.stringify(saved.data), /avatares|avatar_key/);
+    const response = await fetchRaw(owner, '/api/auth/avatar');
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'image/png');
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), PNG);
+  });
+
+  test('una foto nueva reemplaza a la anterior', async () => {
+    assert.equal((await put(owner, WEBP)).status, 200);
+    assert.equal(storedFiles().length, 1);
+    assert.match(storedFiles()[0], /\.webp$/);
+    assert.equal((await fetchRaw(owner, '/api/auth/avatar')).headers.get('content-type'), 'image/webp');
+  });
+
+  test('rechaza lo que no sea una imagen, aunque se declare como tal', async () => {
+    for (const body of ['<svg onload="alert(1)"></svg>', '<script>alert(1)</script>', 'texto', '']) {
+      assert.equal((await put(owner, Buffer.from(body))).status, 400);
+    }
+    assert.equal(storedFiles().length, 1);
+  });
+
+  test('rechaza fotos de más de 1 MB', async () => {
+    const big = await put(owner, Buffer.concat([PNG, Buffer.alloc(1024 * 1024)]));
+    assert.equal(big.status, 413);
+    assert.match(big.data.error, /1 MB/);
+  });
+
+  test('otro cliente no ve fotos ajenas, un admin sí', async () => {
+    assert.equal((await fetchRaw(stranger, `/api/users/${ownerId}/avatar`)).status, 403);
+    assert.equal((await fetchRaw(stranger, '/api/auth/avatar')).status, 404);
+    assert.equal((await fetchRaw(admin, `/api/users/${ownerId}/avatar`)).status, 200);
+  });
+
+  test('editar el perfil no toca la foto', async () => {
+    const response = await owner('/api/auth/profile', 'PATCH', { fullName: 'Foto', username: 'foto-cliente', email: 'f@example.com', country: 'AR', avatar_key: '../../secreto', hasAvatar: 0 });
+    assert.equal(response.data.hasAvatar, 1);
+    assert.equal((await fetchRaw(owner, '/api/auth/avatar')).status, 200);
+  });
+
+  test('quitar la foto borra el archivo', async () => {
+    const removed = await owner('/api/auth/avatar', 'DELETE');
+    assert.equal(removed.status, 200);
+    assert.equal(removed.data.hasAvatar, 0);
+    assert.equal(storedFiles().length, 0);
+    assert.equal((await fetchRaw(owner, '/api/auth/avatar')).status, 404);
+  });
+});
+
 describe('códigos de embarque', () => {
   test('25 embarques simultáneos reciben códigos distintos', async () => {
     const responses = await Promise.all(

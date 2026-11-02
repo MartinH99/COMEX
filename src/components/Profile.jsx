@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../api';
+import { prepareAvatar } from '../lib/avatarImage';
 import { NOTIFICATION_TYPES } from './NotificationCenter';
 import { ChangePasswordModal } from './Sidebar';
-import { ICONS, Icon, Stat, formatDateTime, formatUsd } from './ui';
+import { AvatarImage, ICONS, Icon, Stat, formatDateTime, formatUsd, ownAvatarUrl } from './ui';
 
-const initials = (name) => name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase();
 const formatMonth = (value) => new Date(`${value.replace(' ', 'T')}Z`).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
 
 const editableValues = (user) => ({
@@ -23,6 +23,9 @@ export function Profile({ user, onUserChange, onOpenShipment }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarError, setAvatarError] = useState(null);
+  const fileInput = useRef(null);
 
   const isAdmin = user.role === 'admin';
   const displayName = user.fullName || user.username;
@@ -39,6 +42,31 @@ export function Profile({ user, onUserChange, onOpenShipment }) {
       .catch(err => { if (!ignore) setLoadError(err.message); });
     return () => { ignore = true; };
   }, []);
+
+  const sendAvatar = async (method, body) => {
+    const response = await apiFetch('/api/auth/avatar', { method, headers: body ? { 'Content-Type': body.type } : undefined, body });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'No se pudo actualizar la foto.');
+    onUserChange(data);
+  };
+
+  const runAvatarChange = async (action) => {
+    setAvatarBusy(true);
+    setAvatarError(null);
+    try {
+      await action();
+    } catch (err) {
+      setAvatarError(err.message);
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const handleAvatarFile = (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (file) runAvatarChange(async () => sendAvatar('PUT', await prepareAvatar(file)));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -68,7 +96,20 @@ export function Profile({ user, onUserChange, onOpenShipment }) {
   return (
     <section className="profile">
       <div className="profile-cover">
-        <div className="profile-avatar" aria-hidden="true">{initials(displayName)}</div>
+        <div className="profile-avatar-wrap">
+          <AvatarImage className="profile-avatar" name={displayName} src={ownAvatarUrl(user)} />
+          <button
+            type="button"
+            className="profile-avatar-edit"
+            aria-label={user.hasAvatar ? 'Cambiar foto de perfil' : 'Agregar foto de perfil'}
+            title={user.hasAvatar ? 'Cambiar foto' : 'Agregar foto'}
+            disabled={avatarBusy}
+            onClick={() => fileInput.current.click()}
+          >
+            <Icon paths={['M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z', 'M12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z']} size={15} />
+          </button>
+          <input ref={fileInput} className="profile-avatar-input" type="file" aria-label="Elegir foto de perfil" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarFile} />
+        </div>
         <div className="profile-identity">
           <h1>{displayName}</h1>
           <p>@{user.username}</p>
@@ -77,6 +118,15 @@ export function Profile({ user, onUserChange, onOpenShipment }) {
             {user.clientCompany && <span className="profile-tag">{user.clientCompany}</span>}
             {user.status === 'pending' && <span className="profile-tag profile-tag-pending">Pendiente de aprobación</span>}
           </div>
+          <div className="profile-avatar-actions">
+            <button type="button" disabled={avatarBusy} onClick={() => fileInput.current.click()}>
+              {avatarBusy ? 'Guardando…' : (user.hasAvatar ? 'Cambiar foto' : 'Agregar foto')}
+            </button>
+            {user.hasAvatar && (
+              <button type="button" disabled={avatarBusy} onClick={() => runAvatarChange(() => sendAvatar('DELETE'))}>Quitar foto</button>
+            )}
+          </div>
+          {avatarError && <div className="profile-avatar-error" role="alert">{avatarError}</div>}
         </div>
       </div>
 

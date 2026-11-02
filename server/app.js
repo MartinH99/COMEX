@@ -31,7 +31,8 @@ const SELECT_USER = `
   SELECT
     u.id, u.username, u.role, u.status, u.full_name AS fullName, u.company, u.country, u.email,
     u.client_id AS clientId, c.company AS clientCompany, u.created_at AS createdAt,
-    u.last_login_at AS lastLoginAt
+    u.last_login_at AS lastLoginAt,
+    CASE WHEN u.avatar_key IS NULL THEN 0 ELSE 1 END AS hasAvatar, u.avatar_updated_at AS avatarVersion
   FROM users u
   LEFT JOIN clients c ON c.id = u.client_id
 `;
@@ -286,6 +287,81 @@ async function loadClientSummary(user) {
   };
 }
 
+const MAX_AVATAR_BYTES = 1024 * 1024;
+
+// El tipo se deduce del contenido real: lo que no sea JPG, PNG o WebP no entra
+function detectImageType(buffer) {
+  if (buffer.length > 3 && buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) return { type: 'image/jpeg', extension: 'jpg' };
+  if (buffer.length > 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))) return { type: 'image/png', extension: 'png' };
+  if (buffer.length > 12 && buffer.toString('latin1', 0, 4) === 'RIFF' && buffer.toString('latin1', 8, 12) === 'WEBP') return { type: 'image/webp', extension: 'webp' };
+  return null;
+}
+
+async function sendAvatar(res, userId) {
+  const { rows } = await db.execute({ sql: 'SELECT avatar_key FROM users WHERE id = ?', args: [userId] });
+  const key = rows[0]?.avatar_key;
+  const stream = key ? await readFile(key) : null;
+  if (!stream) return res.status(404).json({ error: 'Sin foto de perfil.' });
+
+  const extension = key.split('.').pop();
+  res.setHeader('Content-Type', { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }[extension]);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  // La URL cambia con cada foto nueva, así que el navegador puede guardarla
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  stream.on('error', () => res.destroy());
+  stream.pipe(res);
+}
+
+// GET /api/auth/avatar
+app.get('/api/auth/avatar', async (req, res) => {
+  try {
+    await sendAvatar(res, req.user.id);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener la foto: ' + error.message });
+  }
+});
+
+// PUT /api/auth/avatar
+app.put('/api/auth/avatar', express.raw({ type: () => true, limit: MAX_AVATAR_BYTES }), async (req, res) => {
+  try {
+    if (!isStorageAvailable()) {
+      return res.status(503).json({ error: 'El almacenamiento de archivos no está configurado.' });
+    }
+    const image = Buffer.isBuffer(req.body) ? detectImageType(req.body) : null;
+    if (!image) return res.status(400).json({ error: 'Elegí una imagen JPG, PNG o WebP.' });
+
+    const { rows } = await db.execute({ sql: 'SELECT avatar_key FROM users WHERE id = ?', args: [req.user.id] });
+    const previousKey = rows[0]?.avatar_key;
+    const key = `avatares/${req.user.id}/${randomUUID()}.${image.extension}`;
+
+    await saveFile(key, req.body, image.type);
+    await db.execute({
+      sql: 'UPDATE users SET avatar_key = ?, avatar_updated_at = ? WHERE id = ?',
+      args: [key, new Date().toISOString(), req.user.id]
+    });
+    if (previousKey) await deleteFile(previousKey).catch(error => console.error('No se pudo borrar la foto anterior:', error.message));
+
+    const updated = await db.execute({ sql: `${SELECT_USER} WHERE u.id = ?`, args: [req.user.id] });
+    res.json({ ...updated.rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al guardar la foto: ' + error.message });
+  }
+});
+
+// DELETE /api/auth/avatar
+app.delete('/api/auth/avatar', async (req, res) => {
+  try {
+    const { rows } = await db.execute({ sql: 'SELECT avatar_key FROM users WHERE id = ?', args: [req.user.id] });
+    await db.execute({ sql: 'UPDATE users SET avatar_key = NULL, avatar_updated_at = NULL WHERE id = ?', args: [req.user.id] });
+    if (rows[0]?.avatar_key) await deleteFile(rows[0].avatar_key).catch(error => console.error('No se pudo borrar la foto:', error.message));
+
+    const updated = await db.execute({ sql: `${SELECT_USER} WHERE u.id = ?`, args: [req.user.id] });
+    res.json({ ...updated.rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al quitar la foto: ' + error.message });
+  }
+});
+
 // GET /api/auth/profile: resumen de actividad del usuario
 app.get('/api/auth/profile', async (req, res) => {
   try {
@@ -380,6 +456,15 @@ app.post('/api/users', async (req, res) => {
   } catch (error) {
     if (error.message.includes('UNIQUE')) return res.status(409).json({ error: 'Ese usuario ya existe.' });
     res.status(500).json({ error: 'Error al crear el usuario: ' + error.message });
+  }
+});
+
+// GET /api/users/:id/avatar: solo admin, por la regla general de rutas
+app.get('/api/users/:id/avatar', async (req, res) => {
+  try {
+    await sendAvatar(res, Number(req.params.id));
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener la foto: ' + error.message });
   }
 });
 
@@ -1592,7 +1677,9 @@ app.delete('/api/shipments/:id', async (req, res) => {
 // Archivos que superan el máximo o JSON inválido: siempre una respuesta legible
 app.use((error, req, res, next) => {
   if (res.headersSent) return next(error);
-  if (error.type === 'entity.too.large') return res.status(413).json({ error: 'El archivo supera el máximo de 4 MB.' });
+  if (error.type === 'entity.too.large') {
+    return res.status(413).json({ error: `El archivo supera el máximo de ${Math.round(error.limit / (1024 * 1024))} MB.` });
+  }
   res.status(error.status || 500).json({ error: error.status ? 'Pedido inválido.' : 'Error interno.' });
 });
 

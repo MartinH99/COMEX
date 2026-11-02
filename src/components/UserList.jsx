@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Entity, ICONS, Modal, PageHeader, Stat } from './ui';
+import { Entity, ICONS, Modal, PageHeader, Stat, userAvatarUrl } from './ui';
 
 const STATUS = {
   pending: { label: 'Pendiente', badge: 'pend' },
@@ -137,7 +137,7 @@ export function UserList({ users, clients, currentUserId, onUpdate, onCreateAdmi
                 return (
                   <tr key={u.id}>
                     <td>
-                      <Entity name={u.username} detail={[u.fullName, u.email].filter(Boolean).join(' · ')} />
+                      <Entity name={u.username} image={userAvatarUrl(u)} detail={[u.fullName, u.email].filter(Boolean).join(' · ')} />
                     </td>
                     <td data-label="Tipo">{u.role === 'admin' ? 'Admin' : 'Cliente'}</td>
                     <td data-label="Empresa declarada">{u.company ? `${u.company}${u.country ? ` (${u.country})` : ''}` : '—'}</td>
