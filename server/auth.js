@@ -8,6 +8,9 @@ export const SESSION_COOKIE = 'comex_session';
 export const SESSION_DAYS = 7;
 export const MAX_FAILED_LOGINS = 5;
 export const LOCK_MINUTES = 15;
+export const MAX_FAILED_LOGINS_PER_IP = 20;
+export const MAX_REGISTRATIONS_PER_IP = 10;
+export const REGISTRATION_WINDOW_MINUTES = 60;
 
 export async function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');

@@ -3,12 +3,21 @@ import { randomUUID } from 'node:crypto';
 import express from 'express';
 import db, { initDb, INSERT_SHIPMENT } from './db.js';
 import {
-  LOCK_MINUTES, MAX_FAILED_LOGINS, SESSION_DAYS, clearedSessionCookie, generateToken, hashPassword,
-  hashToken, readSessionToken, sessionCookie, verifyDummyPassword, verifyPassword
+  LOCK_MINUTES, MAX_FAILED_LOGINS, MAX_FAILED_LOGINS_PER_IP, MAX_REGISTRATIONS_PER_IP, REGISTRATION_WINDOW_MINUTES,
+  SESSION_DAYS, clearedSessionCookie, generateToken, hashPassword, hashToken, readSessionToken, sessionCookie,
+  verifyDummyPassword, verifyPassword
 } from './auth.js';
+import { clearHits, clientIp, isLimited, recordHit } from './rateLimit.js';
 import { deleteFile, isStorageAvailable, readFile, saveFile } from './storage.js';
 
 const app = express();
+app.disable('x-powered-by');
+
+// El detalle técnico queda en los registros del servidor; al navegador solo le llega un mensaje claro
+function serverError(res, message, error) {
+  console.error(message, error);
+  res.status(500).json({ error: message });
+}
 
 // Quién hace cada pedido, para registrarlo en el historial sin pasarlo de función en función
 const requestContext = new AsyncLocalStorage();
@@ -23,7 +32,7 @@ app.use(async (req, res, next) => {
     await initDb();
     next();
   } catch (error) {
-    res.status(500).json({ error: 'Error al inicializar la base de datos: ' + error.message });
+    serverError(res, 'Error al inicializar la base de datos.', error);
   }
 });
 
@@ -69,7 +78,7 @@ app.use('/api', async (req, res, next) => {
     }
     next();
   } catch (error) {
-    res.status(500).json({ error: 'Error al validar la sesión: ' + error.message });
+    serverError(res, 'Error al validar la sesión.', error);
   }
 });
 
@@ -92,6 +101,11 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Completá todos los campos.' });
     }
 
+    const registrationKey = `register:${clientIp(req)}`;
+    if (await isLimited(registrationKey, MAX_REGISTRATIONS_PER_IP)) {
+      return res.status(429).json({ error: 'Se crearon demasiadas cuentas desde esta conexión. Probá de nuevo en una hora.' });
+    }
+
     let userId;
     try {
       const result = await db.execute({
@@ -102,6 +116,7 @@ app.post('/api/auth/register', async (req, res) => {
         args: [username, await hashPassword(password), fullName, company, country, email]
       });
       userId = Number(result.lastInsertRowid);
+      await recordHit(registrationKey, REGISTRATION_WINDOW_MINUTES);
     } catch (error) {
       if (error.message.includes('UNIQUE')) {
         return res.status(409).json({ error: 'Ese usuario ya existe.' });
@@ -113,7 +128,7 @@ app.post('/api/auth/register', async (req, res) => {
     const { rows } = await db.execute({ sql: `${SELECT_USER} WHERE u.id = ?`, args: [userId] });
     res.status(201).json({ ...rows[0] });
   } catch (error) {
-    res.status(500).json({ error: 'Error al registrar el usuario: ' + error.message });
+    serverError(res, 'Error al registrar el usuario.', error);
   }
 });
 
@@ -125,45 +140,41 @@ app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
     if (typeof username !== 'string' || typeof password !== 'string') return invalid();
 
+    // El bloqueo es por cuenta y por IP: desde otra conexión no se puede dejar afuera al dueño de la cuenta
+    const ip = clientIp(req);
+    const accountKey = `login:${username}:${ip}`;
+    const ipKey = `login-ip:${ip}`;
+    if (await isLimited(accountKey, MAX_FAILED_LOGINS) || await isLimited(ipKey, MAX_FAILED_LOGINS_PER_IP)) {
+      return res.status(429).json({ error: `Demasiados intentos. Probá de nuevo en ${LOCK_MINUTES} minutos.` });
+    }
+    const fail = async () => {
+      await recordHit(accountKey, LOCK_MINUTES);
+      await recordHit(ipKey, LOCK_MINUTES);
+      return invalid();
+    };
+
     const { rows } = await db.execute({
-      sql: 'SELECT id, password_hash, status, locked_until FROM users WHERE username = ?',
+      sql: 'SELECT id, password_hash, status FROM users WHERE username = ?',
       args: [username]
     });
     const user = rows[0];
 
     if (!user) {
       await verifyDummyPassword(password);
-      return invalid();
+      return fail();
     }
-    if (user.locked_until && user.locked_until > new Date().toISOString()) {
-      return res.status(429).json({ error: `Demasiados intentos. Probá de nuevo en ${LOCK_MINUTES} minutos.` });
-    }
-
-    if (!(await verifyPassword(password, user.password_hash))) {
-      await db.execute({
-        sql: `
-          UPDATE users SET
-            locked_until = CASE WHEN failed_logins + 1 >= ? THEN ? ELSE NULL END,
-            failed_logins = CASE WHEN failed_logins + 1 >= ? THEN 0 ELSE failed_logins + 1 END
-          WHERE id = ?
-        `,
-        args: [MAX_FAILED_LOGINS, new Date(Date.now() + LOCK_MINUTES * 60 * 1000).toISOString(), MAX_FAILED_LOGINS, user.id]
-      });
-      return invalid();
-    }
+    if (!(await verifyPassword(password, user.password_hash))) return fail();
     if (user.status === 'disabled') {
       return res.status(403).json({ error: 'Tu cuenta está deshabilitada.' });
     }
 
-    await db.execute({
-      sql: 'UPDATE users SET failed_logins = 0, locked_until = NULL, last_login_at = CURRENT_TIMESTAMP WHERE id = ?',
-      args: [user.id]
-    });
+    await clearHits(accountKey);
+    await db.execute({ sql: 'UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?', args: [user.id] });
     await startSession(res, user.id);
     const selected = await db.execute({ sql: `${SELECT_USER} WHERE u.id = ?`, args: [user.id] });
     res.json({ ...selected.rows[0] });
   } catch (error) {
-    res.status(500).json({ error: 'Error al iniciar sesión: ' + error.message });
+    serverError(res, 'Error al iniciar sesión.', error);
   }
 });
 
@@ -180,7 +191,7 @@ app.post('/api/auth/logout', async (req, res) => {
     res.setHeader('Set-Cookie', clearedSessionCookie());
     res.json({ ok: true });
   } catch (error) {
-    res.status(500).json({ error: 'Error al cerrar sesión: ' + error.message });
+    serverError(res, 'Error al cerrar sesión.', error);
   }
 });
 
@@ -206,7 +217,7 @@ app.post('/api/auth/password', async (req, res) => {
     ], 'write');
     res.json({ ok: true });
   } catch (error) {
-    res.status(500).json({ error: 'Error al cambiar la contraseña: ' + error.message });
+    serverError(res, 'Error al cambiar la contraseña.', error);
   }
 });
 
@@ -317,7 +328,7 @@ app.get('/api/auth/avatar', async (req, res) => {
   try {
     await sendAvatar(res, req.user.id);
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener la foto: ' + error.message });
+    serverError(res, 'Error al obtener la foto.', error);
   }
 });
 
@@ -344,7 +355,7 @@ app.put('/api/auth/avatar', express.raw({ type: () => true, limit: MAX_AVATAR_BY
     const updated = await db.execute({ sql: `${SELECT_USER} WHERE u.id = ?`, args: [req.user.id] });
     res.json({ ...updated.rows[0] });
   } catch (error) {
-    res.status(500).json({ error: 'Error al guardar la foto: ' + error.message });
+    serverError(res, 'Error al guardar la foto.', error);
   }
 });
 
@@ -358,7 +369,7 @@ app.delete('/api/auth/avatar', async (req, res) => {
     const updated = await db.execute({ sql: `${SELECT_USER} WHERE u.id = ?`, args: [req.user.id] });
     res.json({ ...updated.rows[0] });
   } catch (error) {
-    res.status(500).json({ error: 'Error al quitar la foto: ' + error.message });
+    serverError(res, 'Error al quitar la foto.', error);
   }
 });
 
@@ -367,7 +378,7 @@ app.get('/api/auth/profile', async (req, res) => {
   try {
     res.json(await (req.user.role === 'client' ? loadClientSummary(req.user) : loadAdminSummary(req.user)));
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener tu actividad: ' + error.message });
+    serverError(res, 'Error al obtener tu actividad.', error);
   }
 });
 
@@ -410,7 +421,7 @@ app.patch('/api/auth/profile', async (req, res) => {
     const { rows } = await db.execute({ sql: `${SELECT_USER} WHERE u.id = ?`, args: [req.user.id] });
     res.json({ ...rows[0] });
   } catch (error) {
-    res.status(500).json({ error: 'Error al guardar tus datos: ' + error.message });
+    serverError(res, 'Error al guardar tus datos.', error);
   }
 });
 
@@ -455,7 +466,7 @@ app.post('/api/users', async (req, res) => {
     res.status(201).json({ ...rows[0] });
   } catch (error) {
     if (error.message.includes('UNIQUE')) return res.status(409).json({ error: 'Ese usuario ya existe.' });
-    res.status(500).json({ error: 'Error al crear el usuario: ' + error.message });
+    serverError(res, 'Error al crear el usuario.', error);
   }
 });
 
@@ -464,7 +475,7 @@ app.get('/api/users/:id/avatar', async (req, res) => {
   try {
     await sendAvatar(res, Number(req.params.id));
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener la foto: ' + error.message });
+    serverError(res, 'Error al obtener la foto.', error);
   }
 });
 
@@ -474,7 +485,7 @@ app.get('/api/users', async (req, res) => {
     const { rows } = await db.execute(`${SELECT_USER} ORDER BY CASE u.status WHEN 'pending' THEN 0 ELSE 1 END, u.id DESC`);
     res.json(rows.map(row => ({ ...row })));
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener usuarios: ' + error.message });
+    serverError(res, 'Error al obtener usuarios.', error);
   }
 });
 
@@ -531,6 +542,8 @@ app.patch('/api/users/:id', async (req, res) => {
         args: [await hashPassword(password), id]
       });
       statements.push({ sql: 'DELETE FROM sessions WHERE user_id = ?', args: [id] });
+      const prefix = `login:${user.username}:`;
+      statements.push({ sql: 'DELETE FROM rate_limits WHERE substr(key, 1, ?) = ?', args: [prefix.length, prefix] });
     }
 
     if (statements.length === 0) return res.status(400).json({ error: 'No hay cambios para aplicar.' });
@@ -539,7 +552,7 @@ app.patch('/api/users/:id', async (req, res) => {
     const updated = await db.execute({ sql: `${SELECT_USER} WHERE u.id = ?`, args: [id] });
     res.json({ ...updated.rows[0] });
   } catch (error) {
-    res.status(500).json({ error: 'Error al actualizar el usuario: ' + error.message });
+    serverError(res, 'Error al actualizar el usuario.', error);
   }
 });
 
@@ -692,7 +705,7 @@ app.put('/api/clients/:id', async (req, res) => {
     }
     res.json(plain(selected.rows[0]));
   } catch (error) {
-    res.status(500).json({ error: 'Error al actualizar el cliente: ' + error.message });
+    serverError(res, 'Error al actualizar el cliente.', error);
   }
 });
 
@@ -719,7 +732,7 @@ app.delete('/api/clients/:id', async (req, res) => {
     }
     res.json({ ok: true, id });
   } catch (error) {
-    res.status(500).json({ error: 'Error al eliminar el cliente: ' + error.message });
+    serverError(res, 'Error al eliminar el cliente.', error);
   }
 });
 
@@ -735,7 +748,7 @@ app.get('/api/clients', async (req, res) => {
     });
     res.json(rows.map(plain));
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener clientes: ' + error.message });
+    serverError(res, 'Error al obtener clientes.', error);
   }
 });
 
@@ -761,7 +774,7 @@ app.post('/api/clients', async (req, res) => {
     });
     res.status(201).json(plain(rows[0]));
   } catch (error) {
-    res.status(500).json({ error: 'Error al crear cliente: ' + error.message });
+    serverError(res, 'Error al crear cliente.', error);
   }
 });
 
@@ -797,7 +810,7 @@ app.get('/api/shipments', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener embarques: ' + error.message });
+    serverError(res, 'Error al obtener embarques.', error);
   }
 });
 
@@ -870,7 +883,7 @@ app.post('/api/shipments', async (req, res) => {
 
     res.status(201).json({ ...plain(newShipment), calibres });
   } catch (error) {
-    res.status(500).json({ error: 'Error al registrar embarque: ' + error.message });
+    serverError(res, 'Error al registrar embarque.', error);
   }
 });
 
@@ -910,7 +923,7 @@ app.patch('/api/shipments/:id/logistics', async (req, res) => {
     if (selected.rows.length === 0) return res.status(404).json({ error: 'Embarque no encontrado.' });
     res.json(plain(selected.rows[0]));
   } catch (error) {
-    res.status(500).json({ error: 'Error al guardar los datos logísticos: ' + error.message });
+    serverError(res, 'Error al guardar los datos logísticos.', error);
   }
 });
 
@@ -948,7 +961,7 @@ app.get('/api/shipments/:id/documents', async (req, res) => {
     });
     res.json(rows.map(row => (isClient(req) ? { ...row, uploadedBy: null } : plain(row))));
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener los documentos: ' + error.message });
+    serverError(res, 'Error al obtener los documentos.', error);
   }
 });
 
@@ -992,7 +1005,7 @@ app.post('/api/shipments/:id/documents', express.raw({ type: () => true, limit: 
       throw error;
     }
   } catch (error) {
-    res.status(500).json({ error: 'Error al subir el documento: ' + error.message });
+    serverError(res, 'Error al subir el documento.', error);
   }
 });
 
@@ -1017,7 +1030,7 @@ app.get('/api/documents/:id/download', async (req, res) => {
     stream.on('error', () => res.destroy());
     stream.pipe(res);
   } catch (error) {
-    res.status(500).json({ error: 'Error al descargar el documento: ' + error.message });
+    serverError(res, 'Error al descargar el documento.', error);
   }
 });
 
@@ -1035,7 +1048,7 @@ app.delete('/api/documents/:id', async (req, res) => {
     await deleteFile(rows[0].storage_key).catch(error => console.error('No se pudo borrar el archivo:', error.message));
     res.json({ ok: true, id });
   } catch (error) {
-    res.status(500).json({ error: 'Error al eliminar el documento: ' + error.message });
+    serverError(res, 'Error al eliminar el documento.', error);
   }
 });
 
@@ -1081,7 +1094,7 @@ app.get('/api/shipments/:id/finance', async (req, res) => {
     if (!(await findShipment(id))) return res.status(404).json({ error: 'Embarque no encontrado.' });
     res.json(await loadShipmentFinance(id));
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener costos y cobros: ' + error.message });
+    serverError(res, 'Error al obtener costos y cobros.', error);
   }
 });
 
@@ -1107,7 +1120,7 @@ app.post('/api/shipments/:id/costs', async (req, res) => {
     });
     res.status(201).json(await loadShipmentFinance(id));
   } catch (error) {
-    res.status(500).json({ error: 'Error al guardar el costo: ' + error.message });
+    serverError(res, 'Error al guardar el costo.', error);
   }
 });
 
@@ -1122,7 +1135,7 @@ app.delete('/api/shipments/:id/costs/:costId', async (req, res) => {
     if (result.rowsAffected === 0) return res.status(404).json({ error: 'Costo no encontrado.' });
     res.json(await loadShipmentFinance(id));
   } catch (error) {
-    res.status(500).json({ error: 'Error al eliminar el costo: ' + error.message });
+    serverError(res, 'Error al eliminar el costo.', error);
   }
 });
 
@@ -1162,7 +1175,7 @@ app.post('/api/shipments/:id/payments', async (req, res) => {
     ], 'write');
     res.status(201).json(await loadShipmentFinance(id));
   } catch (error) {
-    res.status(500).json({ error: 'Error al registrar el cobro: ' + error.message });
+    serverError(res, 'Error al registrar el cobro.', error);
   }
 });
 
@@ -1186,7 +1199,7 @@ app.delete('/api/shipments/:id/payments/:paymentId', async (req, res) => {
     if (result.rowsAffected === 0) return res.status(404).json({ error: 'Cobro no encontrado.' });
     res.json(await loadShipmentFinance(id));
   } catch (error) {
-    res.status(500).json({ error: 'Error al eliminar el cobro: ' + error.message });
+    serverError(res, 'Error al eliminar el cobro.', error);
   }
 });
 
@@ -1263,7 +1276,7 @@ app.put('/api/shipments/:id', async (req, res) => {
     });
     res.json({ ...plain(updated), calibres: savedCalibres });
   } catch (error) {
-    res.status(500).json({ error: 'Error al actualizar el embarque: ' + error.message });
+    serverError(res, 'Error al actualizar el embarque.', error);
   }
 });
 
@@ -1294,7 +1307,7 @@ app.patch('/api/shipments/:id/delivery', async (req, res) => {
 
     res.json(plain(selected.rows[0]));
   } catch (error) {
-    res.status(500).json({ error: 'Error al registrar la entrega: ' + error.message });
+    serverError(res, 'Error al registrar la entrega.', error);
   }
 });
 
@@ -1323,7 +1336,7 @@ app.patch('/api/shipments/:id/status', async (req, res) => {
 
     res.json(plain(selected.rows[0]));
   } catch (error) {
-    res.status(500).json({ error: 'Error al cambiar el estado: ' + error.message });
+    serverError(res, 'Error al cambiar el estado.', error);
   }
 });
 
@@ -1343,7 +1356,7 @@ app.post('/api/shipments/:id/followups', async (req, res) => {
 
     res.status(201).json({ ok: true });
   } catch (error) {
-    res.status(500).json({ error: 'Error al guardar el seguimiento: ' + error.message });
+    serverError(res, 'Error al guardar el seguimiento.', error);
   }
 });
 
@@ -1365,7 +1378,7 @@ app.get('/api/shipments/:id/notifications', async (req, res) => {
     // El cliente no necesita saber quién del equipo hizo cada cambio
     res.json(rows.map(row => (isClient(req) ? { ...row, author: null } : plain(row))));
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener el historial: ' + error.message });
+    serverError(res, 'Error al obtener el historial.', error);
   }
 });
 
@@ -1391,7 +1404,7 @@ app.get('/api/notifications', async (req, res) => {
       unread: Number(results[results.length - 1].rows[0].count)
     });
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener notificaciones: ' + error.message });
+    serverError(res, 'Error al obtener notificaciones.', error);
   }
 });
 
@@ -1404,7 +1417,7 @@ app.post('/api/notifications/read-all', async (req, res) => {
     });
     res.json({ ok: true });
   } catch (error) {
-    res.status(500).json({ error: 'Error al actualizar notificaciones: ' + error.message });
+    serverError(res, 'Error al actualizar notificaciones.', error);
   }
 });
 
@@ -1424,7 +1437,7 @@ app.patch('/api/notifications/:id/read', async (req, res) => {
     }
     res.json({ ok: true, id });
   } catch (error) {
-    res.status(500).json({ error: 'Error al actualizar la notificación: ' + error.message });
+    serverError(res, 'Error al actualizar la notificación.', error);
   }
 });
 
@@ -1504,7 +1517,7 @@ app.get('/api/prospectos', async (req, res) => {
     const { rows } = await db.execute(`${SELECT_PROSPECT} ORDER BY p.id DESC`);
     res.json(rows.map(toProspect));
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener prospectos: ' + error.message });
+    serverError(res, 'Error al obtener prospectos.', error);
   }
 });
 
@@ -1525,7 +1538,7 @@ app.post('/api/prospectos', async (req, res) => {
     const { rows } = await db.execute({ sql: `${SELECT_PROSPECT} WHERE p.id = ?`, args: [Number(result.lastInsertRowid)] });
     res.status(201).json(toProspect(rows[0]));
   } catch (error) {
-    res.status(500).json({ error: 'Error al crear el prospecto: ' + error.message });
+    serverError(res, 'Error al crear el prospecto.', error);
   }
 });
 
@@ -1556,7 +1569,7 @@ app.put('/api/prospectos/:id', async (req, res) => {
 
     res.json(toProspect(selected.rows[0]));
   } catch (error) {
-    res.status(500).json({ error: 'Error al actualizar el prospecto: ' + error.message });
+    serverError(res, 'Error al actualizar el prospecto.', error);
   }
 });
 
@@ -1595,7 +1608,7 @@ app.post('/api/prospectos/:id/client', async (req, res) => {
     });
     res.json({ client: plain(client.rows[0]), created });
   } catch (error) {
-    res.status(500).json({ error: 'Error al crear el cliente: ' + error.message });
+    serverError(res, 'Error al crear el cliente.', error);
   }
 });
 
@@ -1609,7 +1622,7 @@ app.delete('/api/prospectos/:id', async (req, res) => {
     }
     res.json({ ok: true, id });
   } catch (error) {
-    res.status(500).json({ error: 'Error al eliminar el prospecto: ' + error.message });
+    serverError(res, 'Error al eliminar el prospecto.', error);
   }
 });
 
@@ -1619,7 +1632,7 @@ app.get('/api/products', async (req, res) => {
     const { rows } = await db.execute('SELECT id, name FROM products ORDER BY id ASC');
     res.json(rows.map(plain));
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener productos: ' + error.message });
+    serverError(res, 'Error al obtener productos.', error);
   }
 });
 
@@ -1637,7 +1650,7 @@ app.post('/api/products', async (req, res) => {
     if (error.message.includes('UNIQUE')) {
       return res.status(409).json({ error: 'Ese producto ya existe.' });
     }
-    res.status(500).json({ error: 'Error al crear producto: ' + error.message });
+    serverError(res, 'Error al crear producto.', error);
   }
 });
 
@@ -1670,7 +1683,7 @@ app.delete('/api/shipments/:id', async (req, res) => {
 
     res.json({ ok: true, id });
   } catch (error) {
-    res.status(500).json({ error: 'Error al eliminar embarque: ' + error.message });
+    serverError(res, 'Error al eliminar embarque.', error);
   }
 });
 

@@ -175,6 +175,12 @@ const SCHEMA = [
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`,
   'CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)',
+  `CREATE TABLE IF NOT EXISTS rate_limits (
+    key      TEXT PRIMARY KEY,
+    count    INTEGER NOT NULL,
+    reset_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_rate_limits_reset ON rate_limits(reset_at)',
   'CREATE INDEX IF NOT EXISTS idx_notifications_shipment ON notifications(shipment_id)',
   'CREATE INDEX IF NOT EXISTS idx_shipments_client ON shipments(client_id)',
   'CREATE INDEX IF NOT EXISTS idx_calibers_shipment ON shipment_calibers(shipment_id)',

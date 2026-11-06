@@ -75,7 +75,9 @@ let prospectA;
 let prospectB;
 let draftA;
 
+// Todas las pruebas salen de la misma IP: se libera el cupo de registros para no chocar con el límite
 async function registerClient(username, company) {
+  await db.execute("DELETE FROM rate_limits WHERE key LIKE 'register:%'");
   const session = createSession();
   const response = await session('/api/auth/register', 'POST', {
     username, password: 'clave-de-prueba-1', fullName: 'Persona de prueba', company, country: 'AR', email: `${username}@example.com`
@@ -174,6 +176,61 @@ describe('sesión y contraseñas', () => {
       assert.equal((await session('/api/auth/login', 'POST', { username: 'bloqueo', password: 'incorrecta' })).status, 401);
     }
     assert.equal((await session('/api/auth/login', 'POST', { username: 'bloqueo', password: 'clave-de-prueba-1' })).status, 429);
+  });
+
+  test('un bloqueo desde otra IP no deja afuera al dueño de la cuenta', async () => {
+    await db.execute({
+      sql: 'INSERT INTO rate_limits (key, count, reset_at) VALUES (?, 50, ?)',
+      args: ['login:admin-test:203.0.113.9', new Date(Date.now() + 60000).toISOString()]
+    });
+    const session = createSession();
+    assert.equal((await session('/api/auth/login', 'POST', { username: 'admin-test', password: ADMIN_PASSWORD })).status, 200);
+  });
+
+  test('frena muchos intentos fallidos desde una IP, aunque sean a cuentas distintas', async () => {
+    await db.execute("DELETE FROM rate_limits WHERE key LIKE 'login-ip:%'");
+    const session = createSession();
+    try {
+      for (let i = 0; i < 20; i++) {
+        assert.equal((await session('/api/auth/login', 'POST', { username: `inventado-${i}`, password: 'incorrecta' })).status, 401);
+      }
+      assert.equal((await session('/api/auth/login', 'POST', { username: 'admin-test', password: ADMIN_PASSWORD })).status, 429);
+    } finally {
+      await db.execute("DELETE FROM rate_limits WHERE key LIKE 'login%'");
+    }
+  });
+
+  test('limita la cantidad de cuentas nuevas por IP', async () => {
+    await db.execute("DELETE FROM rate_limits WHERE key LIKE 'register:%'");
+    try {
+      for (let i = 0; i < 10; i++) {
+        const response = await createSession()('/api/auth/register', 'POST', {
+          username: `masivo-${i}`, password: 'clave-de-prueba-1', fullName: 'X', company: 'X', country: 'X', email: 'x@example.com'
+        });
+        assert.equal(response.status, 201);
+      }
+      const blocked = await createSession()('/api/auth/register', 'POST', {
+        username: 'masivo-extra', password: 'clave-de-prueba-1', fullName: 'X', company: 'X', country: 'X', email: 'x@example.com'
+      });
+      assert.equal(blocked.status, 429);
+    } finally {
+      await db.execute("DELETE FROM rate_limits WHERE key LIKE 'register:%'");
+    }
+  });
+
+  test('restablecer la clave libera el bloqueo de la cuenta', async () => {
+    const { id } = await registerClient('desbloqueo', 'X');
+    const session = createSession();
+    for (let i = 0; i < 5; i++) await session('/api/auth/login', 'POST', { username: 'desbloqueo', password: 'incorrecta' });
+    assert.equal((await session('/api/auth/login', 'POST', { username: 'desbloqueo', password: 'clave-de-prueba-1' })).status, 429);
+    await admin(`/api/users/${id}`, 'PATCH', { password: 'clave-nueva-123' });
+    assert.equal((await session('/api/auth/login', 'POST', { username: 'desbloqueo', password: 'clave-nueva-123' })).status, 200);
+    await db.execute("DELETE FROM rate_limits WHERE key LIKE 'login-ip:%'");
+  });
+
+  test('la API no anuncia la tecnología del servidor', async () => {
+    const response = await fetch(`${baseUrl}/api/auth/me`);
+    assert.equal(response.headers.get('x-powered-by'), null);
   });
 
   test('cerrar sesión invalida la sesión', async () => {

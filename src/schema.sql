@@ -95,6 +95,13 @@ CREATE TABLE IF NOT EXISTS sessions (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Intentos de ingreso y registros por IP, para frenar ataques de fuerza bruta
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key      TEXT PRIMARY KEY,
+  count    INTEGER NOT NULL,
+  reset_at TEXT NOT NULL
+);
+
 -- Tabla de Notificaciones y seguimientos de embarques
 CREATE TABLE IF NOT EXISTS notifications (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
