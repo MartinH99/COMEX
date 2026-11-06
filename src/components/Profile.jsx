@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../api';
 import { prepareAvatar } from '../lib/avatarImage';
+import { useInstallApp } from '../lib/installApp';
 import { NOTIFICATION_TYPES } from './NotificationCenter';
 import { ChangePasswordModal } from './Sidebar';
 import { AvatarImage, ICONS, Icon, PhotoViewer, Stat, formatDateTime, formatUsd, ownAvatarUrl } from './ui';
@@ -27,6 +28,7 @@ export function Profile({ user, onUserChange, onOpenShipment }) {
   const [avatarError, setAvatarError] = useState(null);
   const [showPhoto, setShowPhoto] = useState(false);
   const fileInput = useRef(null);
+  const app = useInstallApp();
 
   const isAdmin = user.role === 'admin';
   const displayName = user.fullName || user.username;
@@ -129,7 +131,7 @@ export function Profile({ user, onUserChange, onOpenShipment }) {
             <button type="button" disabled={avatarBusy} onClick={() => fileInput.current.click()}>
               {avatarBusy ? 'Guardando…' : (user.hasAvatar ? 'Cambiar foto' : 'Agregar foto')}
             </button>
-            {user.hasAvatar && (
+            {Boolean(user.hasAvatar) && (
               <button type="button" disabled={avatarBusy} onClick={() => runAvatarChange(() => sendAvatar('DELETE'))}>Quitar foto</button>
             )}
           </div>
@@ -226,6 +228,23 @@ export function Profile({ user, onUserChange, onOpenShipment }) {
               <button className="btn btn-small" onClick={() => setShowPassword(true)}>Cambiar</button>
             </div>
           </div>
+
+          <div className="section">
+            <div className="section-header"><h2>App en tu dispositivo</h2></div>
+            <div className="section-body profile-security">
+              <span className="profile-security-icon"><Icon paths={['M8 3h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z', 'M11 18h2']} /></span>
+              <div>
+                <strong>{app.installed ? 'Instalada' : 'Instalar COMEX'}</strong>
+                <p>
+                  {app.installed && 'Estás usando la app instalada.'}
+                  {!app.installed && app.canInstall && 'Abrila desde un ícono, a pantalla completa y sin la barra del navegador.'}
+                  {!app.installed && !app.canInstall && app.ios && 'En Safari, tocá Compartir y después “Agregar a inicio”.'}
+                  {!app.installed && !app.canInstall && !app.ios && 'Abrí el sitio en Chrome o Edge y elegí “Instalar app” en el menú del navegador.'}
+                </p>
+              </div>
+              {!app.installed && app.canInstall && <button className="btn btn-small" onClick={app.install}>Instalar</button>}
+            </div>
+          </div>
         </div>
 
         <div className="section profile-activity">
@@ -263,7 +282,7 @@ export function Profile({ user, onUserChange, onOpenShipment }) {
       </div>
 
       {showPassword && <ChangePasswordModal onClose={() => setShowPassword(false)} />}
-      {showPhoto && user.hasAvatar && <PhotoViewer src={ownAvatarUrl(user)} alt={`Foto de perfil de ${displayName}`} onClose={() => setShowPhoto(false)} />}
+      {showPhoto && Boolean(user.hasAvatar) && <PhotoViewer src={ownAvatarUrl(user)} alt={`Foto de perfil de ${displayName}`} onClose={() => setShowPhoto(false)} />}
     </section>
   );
 }

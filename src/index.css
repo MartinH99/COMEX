@@ -493,6 +493,8 @@ table.table td .tracking-form input { flex: 1; min-width: 0; max-width: none; ma
 .entity-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
 .entity-name { font-weight: 600; overflow-wrap: anywhere; }
 .entity-detail { font-size: 11.5px; color: var(--text-soft); overflow-wrap: anywhere; }
+/* En una tabla el nombre necesita un ancho mínimo: si no, el navegador lo parte letra por letra */
+table.table td .entity-text { min-width: 150px; }
 .code-chip { display: inline-block; padding: 2px 8px; border-radius: 6px; background: var(--gray-bg); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; font-weight: 600; }
 .paid-cell { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 4px; min-width: 96px; }
 .paid-track { display: block; width: 100%; height: 4px; overflow: hidden; border-radius: 999px; background: var(--gray-bg); }
@@ -625,7 +627,7 @@ table.table tbody tr:hover td { background: #F8F9F1; }
   table.table > tbody > tr.detail-row > td, table.table > tbody > tr.detail-row:hover > td { display: block; padding: 10px; background: var(--bg); text-align: left; }
   table.table > tbody > tr > td[data-label] .entity { justify-content: flex-end; }
   table.table > tbody > tr > td[data-label] .entity-avatar { display: none; }
-  table.table > tbody > tr > td[data-label] .entity-text { text-align: right; }
+  table.table > tbody > tr > td[data-label] .entity-text { min-width: 0; text-align: right; }
   .paid-cell { min-width: 120px; }
   table.table td input { width: 120px; max-width: 120px; margin-left: 0; }
   table.detail th, table.detail td { padding: 7px 6px; }

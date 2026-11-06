@@ -1,0 +1,17 @@
+{
+  "id": "/",
+  "name": "COMEX · Gestión de exportaciones",
+  "short_name": "COMEX",
+  "description": "Prospectos, embarques, cobros y seguimiento de entregas.",
+  "lang": "es",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F5F3EC",
+  "theme_color": "#1E3325",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
