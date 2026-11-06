@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { apiFetch } from '../api';
-import { AvatarImage, ICONS, Modal, ownAvatarUrl } from './ui';
+import { AvatarImage, ICONS, Modal, PasswordInput, ownAvatarUrl } from './ui';
 
 const DASHBOARD_ICON = ['M12 20V10', 'M18 20V4', 'M6 20v-4'];
 
@@ -36,22 +36,28 @@ function NavItem({ item, active, badge, onClick }) {
 }
 
 export function ChangePasswordModal({ onClose }) {
-  const [form, setForm] = useState({ currentPassword: '', newPassword: '' });
+  const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const update = (field) => (e) => setForm({ ...form, [field]: e.target.value });
+  // Se avisa recién cuando la repetición ya es tan larga como la nueva, para no marcar error mientras escribe
+  const mismatch = form.confirmPassword.length >= form.newPassword.length && form.confirmPassword !== '' && form.confirmPassword !== form.newPassword;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (form.newPassword !== form.confirmPassword) {
+      setError('Las contraseñas nuevas no coinciden.');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       const response = await apiFetch('/api/auth/password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
+        body: JSON.stringify({ currentPassword: form.currentPassword, newPassword: form.newPassword })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'No se pudo cambiar la contraseña.');
@@ -76,11 +82,25 @@ export function ChangePasswordModal({ onClose }) {
         <form onSubmit={handleSubmit}>
           <div className="modal-field">
             <label htmlFor="currentPassword">Contraseña actual</label>
-            <input id="currentPassword" type="password" autoComplete="current-password" autoFocus value={form.currentPassword} onChange={update('currentPassword')} required />
+            <PasswordInput id="currentPassword" autoComplete="current-password" autoFocus value={form.currentPassword} onChange={update('currentPassword')} required />
           </div>
           <div className="modal-field">
             <label htmlFor="newPassword">Contraseña nueva (mínimo 8 caracteres)</label>
-            <input id="newPassword" type="password" autoComplete="new-password" minLength={8} value={form.newPassword} onChange={update('newPassword')} required />
+            <PasswordInput id="newPassword" autoComplete="new-password" minLength={8} value={form.newPassword} onChange={update('newPassword')} required />
+          </div>
+          <div className="modal-field">
+            <label htmlFor="confirmPassword">Repetí la contraseña nueva</label>
+            <PasswordInput
+              id="confirmPassword"
+              autoComplete="new-password"
+              minLength={8}
+              value={form.confirmPassword}
+              onChange={update('confirmPassword')}
+              aria-invalid={mismatch}
+              aria-describedby={mismatch ? 'confirmPasswordHint' : undefined}
+              required
+            />
+            {mismatch && <div id="confirmPasswordHint" className="password-hint">No coincide con la contraseña nueva.</div>}
           </div>
           {error && <div className="modal-note alert" role="alert">{error}</div>}
           <div className="modal-actions">

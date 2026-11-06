@@ -76,6 +76,34 @@ export function Stat({ icon, label, value, sub, tone }) {
 
 const initials = (name) => (name || '?').trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase();
 
+const EYE = ['M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z'];
+const EYE_OFF = [
+  'M3 3l18 18',
+  'M10.6 5.1A9.9 9.9 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1',
+  'M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6',
+  'M9.9 9.9a3 3 0 0 0 4.2 4.2'
+];
+
+// Campo de contraseña con un botón para mostrarla u ocultarla
+export function PasswordInput(props) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="password-field">
+      <input {...props} type={visible ? 'text' : 'password'} autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+      <button
+        type="button"
+        className="password-toggle"
+        aria-label={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+        aria-pressed={visible}
+        title={visible ? 'Ocultar' : 'Mostrar'}
+        onClick={() => setVisible(!visible)}
+      >
+        <Icon paths={visible ? EYE_OFF : EYE} size={17} />
+      </button>
+    </div>
+  );
+}
+
 // Foto si la hay; si falta o no carga, las iniciales
 export function AvatarImage({ className, name, src }) {
   const [failedSrc, setFailedSrc] = useState(null);
